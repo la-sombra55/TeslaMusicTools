@@ -7,7 +7,8 @@
 - [x] Artist analyzer
 
 ## 🚧 Milestone 2
-- [ ] Song model
+- [x] Create application entry point with main.py
+- [x] Refactor analyzer into reusable run() function- [ ] Song model
 - [ ] CLI
 - [ ] Reports
 - [ ] Duplicate detection
