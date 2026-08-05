@@ -1,7 +1,7 @@
 🚗 Tesla Music Tools - Change Review
 ==================================
 
-Total proposed changes: 17
+Total proposed changes: 15
 
 
 ------------------------------
@@ -10,7 +10,6 @@ Current artist: Chris brown
 New artist: Chris Brown
 
 Files:
-  ✓ 14 Gotta Be Ur Man.mp3
   ✓ 15 Movie.mp3
 
 ------------------------------
@@ -19,7 +18,6 @@ Current artist: Kanye West & JAY Z
 New artist: Jay-Z & Kanye West
 
 Files:
-  ✓ 08 Who Gon Stop Me.m4a
   ✓ 15 The Joy (feat. Curtis Mayfield).m4a
   ✓ 10 Made in America (feat. Frank Ocean).m4a
   ✓ 13 H•a•m.m4a

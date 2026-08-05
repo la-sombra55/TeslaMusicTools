@@ -4,17 +4,22 @@ from datetime import datetime
 
 
 def create_backup(file_path):
-    file_path = Path(file_path)
-
-    backup_root = Path("data/backups")
+    source = Path(file_path)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    backup_folder = backup_root / timestamp
-    backup_folder.mkdir(parents=True, exist_ok=True)
+    backup_root = Path("data/backups") / timestamp
 
-    destination = backup_folder / file_path.name
+    backup_root.mkdir(
+        parents=True,
+        exist_ok=True
+    )
 
-    shutil.copy2(file_path, destination)
+    destination = backup_root / source.name
+
+    shutil.copy2(
+        source,
+        destination
+    )
 
     return destination
