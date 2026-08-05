@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Music library files
+
+data/input/
+
+# Generated reports
+
+data/output/
+
+# Metadata backups
+
+data/backups/
