@@ -48,20 +48,23 @@ def analyze_artists(songs):
     return artists
 
 
+def run():
+        songs = find_songs()
+        
+        print("🎵 Tesla Music Artist Report")
+        print("===========================")
+        print()
+
+        print(f"Songs scanned: {len(songs)}")
+        print()
+
+        artists = analyze_artists(songs)
+
+        print("Artists:")
+        print()
+
+        for artist, count in artists.most_common():
+            print(f"{artist}: {count} songs")
+            
 if __name__ == "__main__":
-    songs = find_songs()
-
-    print("🎵 Tesla Music Artist Report")
-    print("===========================")
-    print()
-
-    print(f"Songs scanned: {len(songs)}")
-    print()
-
-    artists = analyze_artists(songs)
-
-    print("Artists:")
-    print()
-
-    for artist, count in artists.most_common():
-        print(f"{artist}: {count} songs")
+    run()
