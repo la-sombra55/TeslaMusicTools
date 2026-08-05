@@ -18,21 +18,9 @@ def analyze_artists(song_files):
 def run():
     songs = scan_library()
 
-    print("🎵 Tesla Music Artist Report")
-    print("===========================")
-    print()
-
-    print(f"Songs scanned: {len(songs)}")
-    print()
-
     artists = analyze_artists(songs)
 
-    print("Artists:")
-    print()
-
-    for artist, count in artists.most_common():
-        print(f"{artist}: {count} songs")
-
-
-if __name__ == "__main__":
-    run()
+    return {
+        "songs_scanned": len(songs),
+        "artists": artists,
+    }
