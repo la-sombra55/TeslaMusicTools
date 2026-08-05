@@ -1,4 +1,5 @@
 from tesla_music import analyzer
+from tesla_music.confidence import calculate_confidence
 
 
 def main():
@@ -29,14 +30,24 @@ def main():
     for group in report["artist_groups"]:
         print()
 
-        for artist in sorted(
-            group,
-            key=lambda x: x["count"],
-            reverse=True,
-        ):
-            print(
-                f"- {artist['artist']}: {artist['count']} songs"
-        )
+        first = group[0]["artist"]
+        second = group[1]["artist"]
+
+        confidence = calculate_confidence(first, second)
+
+        print(
+            f"🟢 {first} ↔ {second}"
+    )
+
+        print(
+            f"Confidence: {confidence['score']}%"
+    )
+
+        print(
+            f"Reason: {confidence['reason']}"
+    )
+
+        print()
 
 if __name__ == "__main__":
     main()
