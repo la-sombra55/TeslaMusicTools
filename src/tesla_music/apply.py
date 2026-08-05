@@ -47,13 +47,16 @@ def print_apply_report(results):
     print("================================")
     print()
 
+    successful = 0
+    dry_runs = 0
+    failed = 0
+
     for result in results:
-        print(f"File:")
+        print("File:")
         print(f"  {Path(result['file']).name}")
 
         print(
-            f"Artist:"
-            f" {result['from']} → {result['to']}"
+            f"Artist: {result['from']} → {result['to']}"
         )
 
         print(
@@ -61,3 +64,18 @@ def print_apply_report(results):
         )
 
         print()
+        if result["status"] == "updated":
+            successful += 1
+
+        elif result["status"] == "dry_run":
+            dry_runs += 1
+
+        elif result["status"] == "failed":
+            failed += 1
+
+    print("Summary:")
+    print("--------")
+    print(f"Total files processed: {len(results)}")
+    print(f"Successful updates: {successful}")
+    print(f"Dry runs: {dry_runs}")
+    print(f"Failed updates: {failed}")
