@@ -1,0 +1,36 @@
+🚗 Tesla Music Tools - Change Review
+==================================
+
+Total proposed changes: 17
+
+
+------------------------------
+
+Current artist: Chris brown
+New artist: Chris Brown
+
+Files:
+  ✓ 14 Gotta Be Ur Man.mp3
+  ✓ 15 Movie.mp3
+
+------------------------------
+
+Current artist: Kanye West & JAY Z
+New artist: Jay-Z & Kanye West
+
+Files:
+  ✓ 08 Who Gon Stop Me.m4a
+  ✓ 15 The Joy (feat. Curtis Mayfield).m4a
+  ✓ 10 Made in America (feat. Frank Ocean).m4a
+  ✓ 13 H•a•m.m4a
+  ✓ 07 Welcome to the Jungle.m4a
+  ✓ 12 Illest Motherf__ker Alive.m4a
+  ✓ 04 Gotta Have It.m4a
+  ✓ 02 Lift Off (feat. Beyoncé).m4a
+  ✓ 04 Otis (feat. Otis Redding).m4a
+  ✓ 06 That's My Bitch.m4a
+  ✓ 01 No Church in the Wild (feat. Frank Ocean).m4a
+  ✓ 05 New Day.m4a
+  ✓ 14 Primetime.m4a
+  ✓ 03 Ni__as in Paris.m4a
+  ✓ 09 Murder to Excellence.m4a
