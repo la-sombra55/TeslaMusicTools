@@ -1,5 +1,6 @@
 from tesla_music import analyzer
 from tesla_music.confidence import calculate_confidence
+from tesla_music.recommendations import build_recommendations
 
 
 def main():
@@ -24,28 +25,25 @@ def main():
         print()
 
 
-    print("Possible duplicates:")
+    print("Recommended Changes:")
+    print("====================")
     print()
 
-    for group in report["artist_groups"]:
-        print()
-
-        first = group[0]["artist"]
-        second = group[1]["artist"]
-
-        confidence = calculate_confidence(first, second)
-
-        print(
-            f"🟢 {first} ↔ {second}"
+    recommendations = build_recommendations(
+        report["artist_groups"]
     )
 
+    for recommendation in recommendations:
         print(
-            f"Confidence: {confidence['score']}%"
-    )
+            f"Keep: {recommendation['keep']} "
+            f"({recommendation['keep_count']} songs)"
+        )
 
-        print(
-            f"Reason: {confidence['reason']}"
-    )
+        for change in recommendation["change"]:
+            print(
+                f"  Change: {change['artist']} "
+                f"({change['count']} songs)"
+            )
 
         print()
 
