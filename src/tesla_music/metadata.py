@@ -23,13 +23,3 @@ def read_metadata(song_path: Path):
     song.title = audio.get("title", ["Unknown"])[0]
 
     return song
-
-
-if __name__ == "__main__":
-songs = scanner.find_songs()
-
-first_song = songs[0]
-
-song = read_metadata(first_song)
-
-print(song)

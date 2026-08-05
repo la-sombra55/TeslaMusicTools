@@ -1,29 +1,16 @@
 from collections import Counter
 
-from mutagen import File
-
+from tesla_music.metadata import read_metadata
 from tesla_music.scanner import scan_library
 
-def get_artist(song_path):
-    try:
-        audio = File(song_path, easy=True)
-
-        if audio is None:
-            return "Unknown"
-
-        return audio.get("artist", ["Unknown"])[0]
-
-    except Exception as error:
-        print(f"⚠️ Could not read {song_path.name}: {error}")
-        return "Unreadable"
-
-
-def analyze_artists(songs):
+def analyze_artists(song_files):
     artists = Counter()
 
-    for song in songs:
-        artist = get_artist(song)
-        artists[artist] += 1
+    for file in song_files:
+        song = read_metadata(file)
+
+        if song:
+            artists[song.artist] += 1
 
     return artists
 
