@@ -1,28 +1,8 @@
-from pathlib import Path
 from collections import Counter
 
 from mutagen import File
 
-
-MUSIC_FOLDER = Path("data/input")
-
-AUDIO_EXTENSIONS = {
-    ".mp3",
-    ".flac",
-    ".m4a",
-    ".aac",
-}
-
-
-def find_songs():
-    songs = []
-
-    for file in MUSIC_FOLDER.rglob("*"):
-        if file.is_file() and file.suffix.lower() in AUDIO_EXTENSIONS:
-            songs.append(file)
-
-    return songs
-
+from tesla_music.scanner import scan_library
 
 def get_artist(song_path):
     try:
@@ -49,22 +29,23 @@ def analyze_artists(songs):
 
 
 def run():
-        songs = find_songs()
-        
-        print("🎵 Tesla Music Artist Report")
-        print("===========================")
-        print()
+    songs = scan_library()
 
-        print(f"Songs scanned: {len(songs)}")
-        print()
+    print("🎵 Tesla Music Artist Report")
+    print("===========================")
+    print()
 
-        artists = analyze_artists(songs)
+    print(f"Songs scanned: {len(songs)}")
+    print()
 
-        print("Artists:")
-        print()
+    artists = analyze_artists(songs)
 
-        for artist, count in artists.most_common():
-            print(f"{artist}: {count} songs")
-            
+    print("Artists:")
+    print()
+
+    for artist, count in artists.most_common():
+        print(f"{artist}: {count} songs")
+
+
 if __name__ == "__main__":
     run()

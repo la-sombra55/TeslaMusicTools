@@ -2,7 +2,7 @@ from pathlib import Path
 
 from mutagen import File
 
-from models import Song
+from tesla_music.models import Song
 
 
 def read_metadata(song_path: Path):
