@@ -1,6 +1,7 @@
 from tesla_music import analyzer
 from tesla_music.confidence import calculate_confidence
 from tesla_music.recommendations import build_recommendations
+from tesla_music.planner import build_change_plan, save_plan
 
 
 def main():
@@ -32,6 +33,12 @@ def main():
     recommendations = build_recommendations(
         report["artist_groups"],
         report["artist_songs"],
+    )
+    plan = build_change_plan(recommendations)
+    
+    save_plan(
+        plan,
+        "data/output/change_plan.json",
     )
 
     for recommendation in recommendations:
