@@ -20,7 +20,23 @@ def main():
 
     for artist, count in report["artists"].most_common():
         print(f"{artist}: {count} songs")
+        print()
 
+
+    print("Possible duplicates:")
+    print()
+
+    for group in report["artist_groups"]:
+        print()
+
+        for artist in sorted(
+            group,
+            key=lambda x: x["count"],
+            reverse=True,
+        ):
+            print(
+                f"- {artist['artist']}: {artist['count']} songs"
+        )
 
 if __name__ == "__main__":
     main()

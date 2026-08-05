@@ -1,5 +1,6 @@
 from collections import Counter
 
+from tesla_music.normalizer import find_similar_artists
 from tesla_music.metadata import read_metadata
 from tesla_music.scanner import scan_library
 
@@ -21,6 +22,7 @@ def run():
     artists = analyze_artists(songs)
 
     return {
-        "songs_scanned": len(songs),
-        "artists": artists,
-    }
+    "songs_scanned": len(songs),
+    "artists": artists,
+    "artist_groups": find_similar_artists(artists),
+}
