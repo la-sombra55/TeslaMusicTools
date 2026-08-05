@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from tesla_music.backup import create_backup
+
 
 def apply_changes(plan, dry_run=True):
     results = []
@@ -14,6 +16,12 @@ def apply_changes(plan, dry_run=True):
 
         if dry_run:
             result["status"] = "dry_run"
+        
+        else:
+            backup = create_backup(change["file"])
+            
+            result["backup"] = str(backup)
+            result["status"] = "backed_up"
 
         results.append(result)
 
