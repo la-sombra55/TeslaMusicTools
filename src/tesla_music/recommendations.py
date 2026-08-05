@@ -1,4 +1,4 @@
-def build_recommendations(duplicate_groups):
+def build_recommendations(duplicate_groups, artist_songs):
     recommendations = []
 
     for group in duplicate_groups:
@@ -10,6 +10,12 @@ def build_recommendations(duplicate_groups):
 
         keep = sorted_group[0]
         changes = sorted_group[1:]
+
+        for change in changes:
+            change["songs"] = artist_songs.get(
+                change["artist"],
+                []
+            )
 
         recommendations.append(
             {

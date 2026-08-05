@@ -30,7 +30,8 @@ def main():
     print()
 
     recommendations = build_recommendations(
-        report["artist_groups"]
+        report["artist_groups"],
+        report["artist_songs"],
     )
 
     for recommendation in recommendations:
@@ -44,6 +45,11 @@ def main():
                 f"  Change: {change['artist']} "
                 f"({change['count']} songs)"
             )
+            
+            print("  Files:")
+            
+            for song in change["songs"]:
+                print(f"    - {song.path.name}")
 
         print()
 
