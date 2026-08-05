@@ -1,12 +1,15 @@
 from pathlib import Path
 
 from tesla_music.backup import create_backup
+from tesla_music.writer import update_artist
 
 
 def apply_changes(plan, dry_run=True):
     results = []
 
     for change in plan["changes"]:
+        file_path = change["file"]
+        
         result = {
             "file": change["file"],
             "from": change["current_artist"],
@@ -18,10 +21,20 @@ def apply_changes(plan, dry_run=True):
             result["status"] = "dry_run"
         
         else:
-            backup = create_backup(change["file"])
+            try:
+                backup = create_backup(file_path)
+                
+                update_artist(
+                    file_path,
+                    change["new_artist"],
+                )
+
+                result["backup"] = str(backup)
+                result["status"] = "updated"
             
-            result["backup"] = str(backup)
-            result["status"] = "backed_up"
+            except Exception as error:
+                result["status"] = "failed"
+                result["error"] = str(error)
 
         results.append(result)
 

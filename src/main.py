@@ -1,3 +1,4 @@
+import argparse
 from tesla_music import analyzer
 from tesla_music.recommendations import build_recommendations
 from tesla_music.planner import build_change_plan, save_plan
@@ -10,7 +11,21 @@ from tesla_music.apply import (
     print_apply_report,
 )
 
+def get_args():
+    parser = argparse.ArgumentParser(
+        description="Tesla Music Tools"
+    )
+
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply metadata changes"
+    )
+
+    return parser.parse_args()
+
 def main():
+    args = get_args()
     print("🚗 Tesla Music Tools")
     print("--------------------")
 
@@ -78,7 +93,7 @@ def main():
 
     apply_results = apply_changes(
         plan,
-        dry_run=True,
+        dry_run=not args.apply,
 )
 
     print_apply_report(
