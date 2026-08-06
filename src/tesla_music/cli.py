@@ -1,4 +1,5 @@
 import argparse
+import time
 from pathlib import Path
 
 from tesla_music import analyzer
@@ -24,6 +25,13 @@ from tesla_music.restore import (
     apply_restore,
     build_restore_plan,
     print_restore_report,
+)
+from tesla_music.artwork import (
+    LOW_CONFIDENCE_THRESHOLD,
+    apply_artwork,
+    build_artwork_plan,
+    flatten_group,
+    print_artwork_report,
 )
 
 def get_args():
@@ -68,6 +76,12 @@ def get_args():
         "--list-backups",
         action="store_true",
         help="List available backup sessions"
+    )
+
+    parser.add_argument(
+        "--add-artwork",
+        action="store_true",
+        help="Search iTunes for missing album art and embed it"
     )
 
     return parser.parse_args()
@@ -125,6 +139,57 @@ def run_restore(args):
 
     print_restore_report(results)
 
+def _print_artwork_progress(start_time):
+    def on_progress(completed, total):
+        elapsed = time.time() - start_time
+        rate = elapsed / completed if completed else 0
+        eta_seconds = round(rate * (total - completed))
+        percent = round(completed / total * 100) if total else 100
+
+        print(
+            f"\rSearching artwork... {completed}/{total} albums/singles "
+            f"({percent}%) — ~{eta_seconds}s remaining",
+            end="",
+            flush=True,
+        )
+
+        if completed == total:
+            print()
+
+    return on_progress
+
+def run_add_artwork(args):
+    report = analyzer.run(args.library)
+
+    plan = build_artwork_plan(
+        report["artist_songs"], on_progress=_print_artwork_progress(time.time())
+    )
+
+    print()
+    print(f"🎨 Found artwork for {plan['total_files']} song(s) missing it")
+    print("=====================================================")
+    print()
+
+    all_changes = []
+
+    for group in plan["groups"]:
+        label = group["album"] or f"(single) {group['songs'][0].title}"
+        confidence = group["primary"]["confidence"]
+        flag = " ⚠️  LOW CONFIDENCE" if confidence < LOW_CONFIDENCE_THRESHOLD else ""
+
+        print(f"{group['artist']} — {label} — {confidence}% confidence{flag}")
+
+        for song in group["songs"]:
+            print(f"  - {song.path.name}")
+
+        all_changes.extend(flatten_group(group))
+
+    flat_plan = {"total_files": len(all_changes), "changes": all_changes}
+
+    results = apply_artwork(flat_plan, dry_run=not args.apply)
+
+    print_artwork_report(results)
+
 def main():
     args = get_args()
     print("🚗 Tesla Music Tools")
@@ -144,6 +209,10 @@ def main():
 
     if args.flatten:
         run_flatten(args)
+        return
+
+    if args.add_artwork:
+        run_add_artwork(args)
         return
 
     report = analyzer.run(args.library)

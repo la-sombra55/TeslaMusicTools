@@ -1,9 +1,17 @@
+import time
 from pathlib import Path
 
 import streamlit as st
 
 from tesla_music import analyzer
 from tesla_music.apply import apply_changes
+from tesla_music.artwork import (
+    LOW_CONFIDENCE_THRESHOLD,
+    apply_artwork,
+    build_artwork_plan,
+    flatten_group,
+    search_artwork_alternate,
+)
 from tesla_music.backup import list_backup_sessions
 from tesla_music.feat_normalizer import find_featured_artist_changes
 from tesla_music.flattener import apply_flatten, build_flatten_plan
@@ -24,8 +32,8 @@ def build_combined_plan(report):
 st.set_page_config(page_title="Tesla Music Tools", page_icon="🚗")
 st.title("🚗 Tesla Music Tools")
 
-tab_cleanup, tab_flatten, tab_restore = st.tabs(
-    ["Clean Up Library", "Flatten for USB", "Backups & Restore"]
+tab_cleanup, tab_flatten, tab_restore, tab_artwork = st.tabs(
+    ["Clean Up Library", "Flatten for USB", "Backups & Restore", "Add Artwork"]
 )
 
 with tab_cleanup:
@@ -188,6 +196,166 @@ with tab_restore:
                 failed = sum(1 for r in results if r["status"] == "failed")
 
                 message = f"Restored {restored} file(s)."
+                if failed:
+                    message += f" {failed} failed."
+
+                st.success(message)
+
+with tab_artwork:
+    st.header("Add Missing Album Art")
+    st.write(
+        "Searches Apple's iTunes catalog for songs missing embedded cover art, "
+        "grouped by album (or by song title for singles/EPs with no album "
+        "tag). Matches below the confidence threshold automatically get a "
+        "second opinion from Deezer so you can compare and pick."
+    )
+
+    artwork_library_path = st.text_input(
+        "Library path", value="data/input", key="artwork_library_path"
+    )
+
+    st.caption(
+        "Searching can take a while on a large library — roughly 1 second per "
+        "unique album/single, to stay polite to Apple's and Deezer's APIs."
+    )
+
+    if st.button("Search for Missing Artwork"):
+        with st.spinner("Scanning library..."):
+            artwork_report = analyzer.run(artwork_library_path)
+
+        progress_bar = st.progress(0, text="Starting artwork search...")
+        start_time = time.time()
+
+        def _update_artwork_progress(completed, total):
+            elapsed = time.time() - start_time
+            rate = elapsed / completed if completed else 0
+            eta_seconds = round(rate * (total - completed))
+            fraction = completed / total if total else 1.0
+
+            eta_text = f"~{eta_seconds}s remaining" if completed > 0 else "estimating time remaining..."
+            progress_bar.progress(
+                fraction,
+                text=f"Searching artwork... {completed}/{total} albums/singles ({eta_text})",
+            )
+
+        st.session_state["artwork_plan"] = build_artwork_plan(
+            artwork_report["artist_songs"], on_progress=_update_artwork_progress
+        )
+
+        progress_bar.empty()
+
+    artwork_plan = st.session_state.get("artwork_plan")
+
+    if artwork_plan is not None:
+        if artwork_plan["total_files"] == 0:
+            st.success("✅ No missing artwork found (or no matches anywhere).")
+
+        else:
+            groups = sorted(artwork_plan["groups"], key=lambda g: g["primary"]["confidence"])
+
+            st.info(
+                f"Found artwork for {artwork_plan['total_files']} song(s) across "
+                f"{len(groups)} album(s)/single(s). Flagged ones (below "
+                f"{LOW_CONFIDENCE_THRESHOLD}% confidence) are listed first."
+            )
+
+            selected_changes = []
+
+            for i, group in enumerate(groups):
+                confidence = group["primary"]["confidence"]
+                is_flagged = confidence < LOW_CONFIDENCE_THRESHOLD
+                song_count = len(group["songs"])
+                title_label = group["album"] or f'(Single) "{group["songs"][0].title}"'
+                flag = "⚠️ " if is_flagged else ""
+
+                with st.container(border=True):
+                    st.markdown(
+                        f"{flag}**{group['artist']} — {title_label}** "
+                        f"({song_count} song{'s' if song_count != 1 else ''})"
+                    )
+
+                    image_cols = st.columns(2)
+
+                    with image_cols[0]:
+                        st.image(group["primary"]["artwork_url"], width=150)
+                        st.caption(f"Apple — {confidence}% confidence")
+
+                    with image_cols[1]:
+                        if group["alternate"] is not None:
+                            st.image(group["alternate"]["artwork_url"], width=150)
+                            st.caption(f"Deezer — {group['alternate']['confidence']}% confidence")
+
+                        else:
+                            st.caption("No alternate fetched.")
+
+                            if st.button("🔍 Search Deezer for a different image", key=f"search_alt_{i}"):
+                                with st.spinner("Searching Deezer..."):
+                                    alt_match = search_artwork_alternate(
+                                        group["artist"],
+                                        group["album"] or "Unknown",
+                                        group["songs"][0].title,
+                                    )
+
+                                if alt_match is not None:
+                                    alt_url, alt_confidence = alt_match
+                                    group["alternate"] = {
+                                        "artwork_url": alt_url,
+                                        "confidence": alt_confidence,
+                                        "source": "Deezer",
+                                    }
+                                else:
+                                    st.warning("No Deezer match found.")
+
+                                st.rerun()
+
+                    options = ["Use Apple image"]
+                    if group["alternate"] is not None:
+                        options.append("Use Deezer image")
+                    options.append("Skip this one")
+
+                    default_index = options.index("Skip this one") if is_flagged else 0
+
+                    choice = st.radio(
+                        "Which image should be used?",
+                        options,
+                        index=default_index,
+                        key=f"artwork_choice_{i}",
+                        horizontal=True,
+                    )
+
+                    if choice == "Use Apple image":
+                        selected_changes.extend(flatten_group(group, use_alternate=False))
+                    elif choice == "Use Deezer image":
+                        selected_changes.extend(flatten_group(group, use_alternate=True))
+
+                    with st.expander(f"{song_count} song(s) in this group"):
+                        for song in group["songs"]:
+                            st.caption(song.path.name)
+
+            st.warning(f"{len(selected_changes)} song(s) will have artwork added.")
+
+            confirm_artwork = st.checkbox(
+                "I've reviewed the images above and want to add artwork to the "
+                "selected songs (a backup is made first)"
+            )
+
+            if st.button(
+                "Add Artwork",
+                type="primary",
+                disabled=not confirm_artwork or not selected_changes,
+            ):
+                selected_plan = {
+                    "total_files": len(selected_changes),
+                    "changes": selected_changes,
+                }
+
+                with st.spinner("Downloading and embedding artwork..."):
+                    artwork_results = apply_artwork(selected_plan, dry_run=False)
+
+                added = sum(1 for r in artwork_results if r["status"] == "added")
+                failed = sum(1 for r in artwork_results if r["status"] == "failed")
+
+                message = f"Added artwork to {added} file(s)."
                 if failed:
                     message += f" {failed} failed."
 
