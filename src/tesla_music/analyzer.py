@@ -34,8 +34,8 @@ def analyze_formats(artist_songs):
     return formats, format_songs
 
 
-def run():
-    songs = scan_library()
+def run(library_path=None):
+    songs = scan_library(library_path)
 
     artists, artist_songs = analyze_artists(songs)
     formats, format_songs = analyze_formats(artist_songs)

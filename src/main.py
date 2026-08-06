@@ -43,10 +43,16 @@ def get_args():
         help="Copy every song into a single flat folder (data/output/flattened)"
     )
 
+    parser.add_argument(
+        "--library",
+        default=None,
+        help="Path to your music library (default: data/input)"
+    )
+
     return parser.parse_args()
 
 def run_flatten(args):
-    songs = scan_library()
+    songs = scan_library(args.library)
 
     plan = build_flatten_plan(songs, "data/output/flattened")
 
@@ -63,11 +69,15 @@ def main():
     print("🚗 Tesla Music Tools")
     print("--------------------")
 
+    if args.library and not Path(args.library).is_dir():
+        print(f"❌ Library path not found: {args.library}")
+        return
+
     if args.flatten:
         run_flatten(args)
         return
 
-    report = analyzer.run()
+    report = analyzer.run(args.library)
 
     print()
     print("🎵 Tesla Music Artist Report")
