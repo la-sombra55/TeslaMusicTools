@@ -55,50 +55,60 @@ def main():
         report["artist_groups"],
         report["artist_songs"],
     )
-
-    for recommendation in recommendations:
-        print(
-            f"Keep: {recommendation['keep']} "
-            f"({recommendation['keep_count']} songs)"
-         )
-
-        for change in recommendation["change"]:
-            print(
-                f"  Change: {change['artist']} "
-                f"({change['count']} songs)"
-            )
-
-            print("  Files:")
-
-            for song in change["songs"]:
-                print(f"    - {song.path.name}")
-
+    
+    if not recommendations:
+        print("✅ Library is already clean. No changes recommended.")
         print()
 
+    else:
+        for recommendation in recommendations:
+            print(
+                f"Keep: {recommendation['keep']} "
+                f"({recommendation['keep_count']} songs)"
+            )
+            print(
+                f"  Confidence: {recommendation['confidence']}% "
+                f"({recommendation['reason']})"
+            )
 
-    plan = build_change_plan(recommendations)
+            for change in recommendation["change"]:
+                print(
+                    f"  Change: {change['artist']} "
+                    f"({change['count']} songs)"
+                )
+                
+                print("    Files:")
+                
+                for song in change["songs"]:
+                    print(f"      - {song.path.name}")
+                    
+            print()
 
-    save_plan(
-        plan,
-        "data/output/change_plan.json"
-)
 
-    review_report = build_review_report(plan)
+    if recommendations:
+        plan = build_change_plan(recommendations)
 
-    save_review_report(
-        review_report,
-        "data/output/change_report.txt"
-)
+        save_plan(
+            plan,
+            "data/output/change_plan.json"
+    )
+
+        review_report = build_review_report(plan)
+
+        save_review_report(
+            review_report,
+            "data/output/change_report.txt"
+    )
 
 
-    apply_results = apply_changes(
-        plan,
-        dry_run=not args.apply,
-)
+        apply_results = apply_changes(
+            plan,
+            dry_run=not args.apply,
+    )
 
-    print_apply_report(
-        apply_results
-)
+        print_apply_report(
+            apply_results
+    )
 
 if __name__ == "__main__":
     main()

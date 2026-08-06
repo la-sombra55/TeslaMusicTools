@@ -1,3 +1,4 @@
+# Manual smoke script — mutates a real file in data/input/test_library. Run from repo root.
 from tesla_music.writer import update_artist
 
 

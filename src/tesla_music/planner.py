@@ -7,6 +7,8 @@ def build_change_plan(recommendations):
 
     for recommendation in recommendations:
         keep_artist = recommendation["keep"]
+        confidence = recommendation["confidence"]
+        reason = recommendation["reason"]
 
         for change in recommendation["change"]:
             current_artist = change["artist"]
@@ -17,6 +19,8 @@ def build_change_plan(recommendations):
                         "file": str(song.path),
                         "current_artist": current_artist,
                         "new_artist": keep_artist,
+                        "confidence": confidence,
+                        "reason": reason,
                     }
                 )
 

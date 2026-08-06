@@ -3,7 +3,7 @@ def build_recommendations(duplicate_groups, artist_songs):
 
     for group in duplicate_groups:
         sorted_group = sorted(
-            group,
+            group["artists"],
             key=lambda x: x["count"],
             reverse=True,
         )
@@ -22,6 +22,8 @@ def build_recommendations(duplicate_groups, artist_songs):
                 "keep": keep["artist"],
                 "keep_count": keep["count"],
                 "change": changes,
+                "confidence": group["score"],
+                "reason": group["reason"],
             }
         )
 

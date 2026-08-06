@@ -34,6 +34,9 @@ def build_review_report(plan):
             lines.append(
                 f"New artist: {change['new_artist']}"
             )
+            lines.append(
+                f"Confidence: {change['confidence']}% ({change['reason']})"
+            )
             lines.append("")
             lines.append("Files:")
 
