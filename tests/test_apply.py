@@ -24,7 +24,9 @@ def test_dry_run_marks_every_change_as_dry_run_without_touching_files(monkeypatc
 
 
 def test_successful_apply_backs_up_then_updates_and_records_backup_path(monkeypatch):
-    monkeypatch.setattr(apply, "create_backup", lambda file_path: Path("data/backups/x/a.mp3"))
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
     monkeypatch.setattr(apply, "update_tags", lambda file_path, tags: True)
 
     plan = _plan(
@@ -38,7 +40,9 @@ def test_successful_apply_backs_up_then_updates_and_records_backup_path(monkeypa
 
 
 def test_successful_apply_only_passes_fields_that_changed(monkeypatch):
-    monkeypatch.setattr(apply, "create_backup", lambda file_path: Path("data/backups/x/a.mp3"))
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
 
     captured_tags = {}
 
@@ -69,7 +73,9 @@ def test_successful_apply_only_passes_fields_that_changed(monkeypatch):
 
 
 def test_failed_update_is_recorded_but_does_not_raise(monkeypatch):
-    monkeypatch.setattr(apply, "create_backup", lambda file_path: Path("data/backups/x/a.mp3"))
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
 
     def raise_error(file_path, tags):
         raise ValueError("Unsupported file type: .flac")

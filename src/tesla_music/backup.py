@@ -1,25 +1,43 @@
+from datetime import datetime
 from pathlib import Path
 import shutil
-from datetime import datetime
 
 
-def create_backup(file_path):
+def new_backup_root():
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return Path("data/backups") / timestamp
+
+
+def _mirrored_path(file_path):
+    file_path = Path(file_path)
+
+    if file_path.is_absolute():
+        file_path = file_path.relative_to(file_path.anchor)
+
+    return file_path
+
+
+def create_backup(file_path, backup_root=None):
     source = Path(file_path)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if backup_root is None:
+        backup_root = new_backup_root()
 
-    backup_root = Path("data/backups") / timestamp
+    destination = Path(backup_root) / _mirrored_path(source)
 
-    backup_root.mkdir(
-        parents=True,
-        exist_ok=True
-    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
 
-    destination = backup_root / source.name
-
-    shutil.copy2(
-        source,
-        destination
-    )
+    shutil.copy2(source, destination)
 
     return destination
+
+
+def list_backup_sessions():
+    backups_root = Path("data/backups")
+
+    if not backups_root.is_dir():
+        return []
+
+    sessions = [entry.name for entry in backups_root.iterdir() if entry.is_dir()]
+
+    return sorted(sessions, reverse=True)

@@ -1,3 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tesla-music-tools"
+version = "0.1.0"
+description = "Clean up and standardize music metadata before copying a library onto a Tesla USB drive"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "mutagen>=1.48,<2",
+]
+
+[project.scripts]
+tesla-music-tools = "tesla_music.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]

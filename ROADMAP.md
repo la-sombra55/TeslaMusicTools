@@ -1,19 +1,18 @@
 # Tesla Music Tools Roadmap
 
-## ✅ Milestone 1
-- [x] Project setup
-- [x] Scanner
-- [x] Metadata reader
-- [x] Artist analyzer
-
-## 🚧 Milestone 2
-- [x] Create application entry point with main.py
-- [x] Refactor analyzer into reusable run() function- [ ] Song model
-- [ ] CLI
-- [ ] Reports
-- [ ] Duplicate detection
+## ✅ Done
+- [x] Scanner, metadata reader, Song model
+- [x] CLI entry point (`main.py`)
+- [x] Duplicate-artist detection with confidence scoring
+- [x] "Featuring" credit normalization (Artist -> Title)
+- [x] Change plan / review report / dry-run + apply
+- [x] Backups before every real change, with restore support
+- [x] Flatten library into one folder
+- [x] File-format report
+- [x] `--library` argument (usable against any music folder, not just `data/input/`)
+- [x] Automated test suite (pytest)
+- [x] Packaging (`pip install -e .`, `tesla-music-tools` console command)
 
 ## 📅 Future
-- [ ] Metadata cleanup
-- [ ] Album art
-- [ ] Desktop app
+- [ ] Album art / additional tag cleanup
+- [ ] Desktop or web UI
