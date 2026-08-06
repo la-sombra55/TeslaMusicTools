@@ -12,6 +12,9 @@ dependencies = [
     "mutagen>=1.48,<2",
 ]
 
+[project.optional-dependencies]
+ui = ["streamlit>=1.30"]
+
 [project.scripts]
 tesla-music-tools = "tesla_music.cli:main"
 
