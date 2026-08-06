@@ -51,3 +51,30 @@ def test_update_artist_raises_when_file_cannot_be_read(monkeypatch, suffix):
 
     with pytest.raises(ValueError, match="Could not read"):
         writer.update_artist(Path(f"song{suffix}"), "Chris Brown")
+
+
+def test_update_tags_sets_artist_and_title_together_for_mp3(monkeypatch):
+    fake_audio = FakeAudio()
+    monkeypatch.setattr(writer, "File", lambda path, easy=False: fake_audio)
+
+    writer.update_tags(
+        Path("song.mp3"),
+        {"artist": "Maroon 5", "title": "Girls Like You (feat. Cardi B)"},
+    )
+
+    assert fake_audio.tags["artist"] == ["Maroon 5"]
+    assert fake_audio.tags["title"] == ["Girls Like You (feat. Cardi B)"]
+    assert fake_audio.saved is True
+
+
+def test_update_tags_sets_artist_and_title_together_for_m4a(monkeypatch):
+    fake_audio = FakeAudio()
+    monkeypatch.setattr(writer, "File", lambda path, easy=False: fake_audio)
+
+    writer.update_tags(
+        Path("song.m4a"),
+        {"artist": "Maroon 5", "title": "Girls Like You (feat. Cardi B)"},
+    )
+
+    assert fake_audio.tags["\xa9ART"] == ["Maroon 5"]
+    assert fake_audio.tags["\xa9nam"] == ["Girls Like You (feat. Cardi B)"]

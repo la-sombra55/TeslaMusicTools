@@ -1,7 +1,19 @@
 from pathlib import Path
 
 from tesla_music.backup import create_backup
-from tesla_music.writer import update_artist
+from tesla_music.writer import update_tags
+
+
+def _tag_updates(change):
+    tags = {}
+
+    if change.get("new_artist") is not None:
+        tags["artist"] = change["new_artist"]
+
+    if change.get("new_title") is not None:
+        tags["title"] = change["new_title"]
+
+    return tags
 
 
 def apply_changes(plan, dry_run=True):
@@ -9,29 +21,31 @@ def apply_changes(plan, dry_run=True):
 
     for change in plan["changes"]:
         file_path = change["file"]
-        
+
         result = {
             "file": change["file"],
-            "from": change["current_artist"],
-            "to": change["new_artist"],
+            "current_artist": change.get("current_artist"),
+            "new_artist": change.get("new_artist"),
+            "current_title": change.get("current_title"),
+            "new_title": change.get("new_title"),
             "status": "pending",
         }
 
         if dry_run:
             result["status"] = "dry_run"
-        
+
         else:
             try:
                 backup = create_backup(file_path)
-                
-                update_artist(
+
+                update_tags(
                     file_path,
-                    change["new_artist"],
+                    _tag_updates(change),
                 )
 
                 result["backup"] = str(backup)
                 result["status"] = "updated"
-            
+
             except Exception as error:
                 result["status"] = "failed"
                 result["error"] = str(error)
@@ -55,9 +69,15 @@ def print_apply_report(results):
         print("File:")
         print(f"  {Path(result['file']).name}")
 
-        print(
-            f"Artist: {result['from']} → {result['to']}"
-        )
+        if result.get("new_artist") is not None:
+            print(
+                f"Artist: {result['current_artist']} → {result['new_artist']}"
+            )
+
+        if result.get("new_title") is not None:
+            print(
+                f"Title: {result['current_title']} → {result['new_title']}"
+            )
 
         print(
             f"Status: {result['status']}"

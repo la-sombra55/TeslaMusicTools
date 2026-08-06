@@ -47,6 +47,27 @@ def test_build_review_report_starts_new_section_per_artist_pair():
     assert "Confidence: 85% (Word order difference)" in report
 
 
+def test_build_review_report_shows_title_change_when_present():
+    plan = {
+        "total_changes": 1,
+        "changes": [
+            {
+                "file": "a.mp3",
+                "current_artist": "Maroon 5 feat. Cardi B",
+                "new_artist": "Maroon 5",
+                "current_title": "Girls Like You",
+                "new_title": "Girls Like You (feat. Cardi B)",
+                "confidence": 100,
+                "reason": "Featured artist 'Cardi B' moved from Artist tag to Title tag",
+            }
+        ],
+    }
+
+    report = build_review_report(plan)
+
+    assert 'Title: "Girls Like You" → "Girls Like You (feat. Cardi B)"' in report
+
+
 def test_save_review_report_writes_text(tmp_path):
     output_path = tmp_path / "change_report.txt"
 

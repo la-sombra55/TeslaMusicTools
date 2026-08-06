@@ -24,6 +24,10 @@ def build_change_plan(recommendations):
                     }
                 )
 
+    return build_plan(changes)
+
+
+def build_plan(changes):
     return {
         "total_changes": len(changes),
         "changes": changes,

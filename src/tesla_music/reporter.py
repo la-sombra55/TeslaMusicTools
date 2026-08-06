@@ -40,9 +40,14 @@ def build_review_report(plan):
             lines.append("")
             lines.append("Files:")
 
-        lines.append(
-            f"  ✓ {Path(change['file']).name}"
-        )
+        file_line = f"  ✓ {Path(change['file']).name}"
+
+        if change.get("new_title") and change["new_title"] != change.get("current_title"):
+            file_line += (
+                f' (Title: "{change["current_title"]}" → "{change["new_title"]}")'
+            )
+
+        lines.append(file_line)
 
     return "\n".join(lines)
 
