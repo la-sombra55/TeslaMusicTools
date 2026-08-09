@@ -15,6 +15,13 @@ from tesla_music.artwork import (
 from tesla_music.backup import list_backup_sessions
 from tesla_music.feat_normalizer import find_featured_artist_changes
 from tesla_music.flattener import apply_flatten, build_flatten_plan
+from tesla_music.multi_artist import (
+    SEPARATOR_AMPERSAND,
+    SEPARATOR_SLASH,
+    build_feature_choice,
+    build_separator_choice,
+    find_multi_artist_credits,
+)
 from tesla_music.planner import build_album_change_plan, build_change_plan, build_plan
 from tesla_music.recommendations import build_album_recommendations, build_recommendations
 from tesla_music.restore import apply_restore, build_restore_plan
@@ -42,8 +49,14 @@ def build_combined_plan(report):
 st.set_page_config(page_title="Tesla Music Tools", page_icon="🚗")
 st.title("🚗 Tesla Music Tools")
 
-tab_cleanup, tab_flatten, tab_restore, tab_artwork = st.tabs(
-    ["Clean Up Library", "Flatten for USB", "Backups & Restore", "Add Artwork"]
+tab_cleanup, tab_flatten, tab_restore, tab_artwork, tab_multi_artist = st.tabs(
+    [
+        "Clean Up Library",
+        "Flatten for USB",
+        "Backups & Restore",
+        "Add Artwork",
+        "Multi-Artist Credits",
+    ]
 )
 
 with tab_cleanup:
@@ -383,6 +396,118 @@ with tab_artwork:
                 failed = sum(1 for r in artwork_results if r["status"] == "failed")
 
                 message = f"Added artwork to {added} file(s)."
+                if failed:
+                    message += f" {failed} failed."
+
+                st.success(message)
+
+with tab_multi_artist:
+    st.header("Resolve multi-artist credits")
+    st.write(
+        "Finds Artist tags that look like more than one artist sharing a single "
+        "credit (joined by \"&\", \",\", \"and\", \"/\", or \"vs\"), excluding "
+        "anything the featuring cleanup already handles. Some of these are "
+        "genuine duets that should feature one artist in the title; others are "
+        "real group names that should just stay as one credit — you decide "
+        "each one."
+    )
+
+    multi_artist_library_path = st.text_input(
+        "Library path", value="data/input", key="multi_artist_library_path"
+    )
+
+    if st.button("Find Multi-Artist Credits"):
+        multi_artist_report = analyzer.run(multi_artist_library_path)
+        st.session_state["multi_artist_candidates"] = find_multi_artist_credits(
+            multi_artist_report["artist_songs"]
+        )
+
+    multi_artist_candidates = st.session_state.get("multi_artist_candidates")
+
+    if multi_artist_candidates is not None:
+        if not multi_artist_candidates:
+            st.success("✅ No ambiguous multi-artist credits found.")
+
+        else:
+            st.info(
+                f"Found {len(multi_artist_candidates)} credit(s). Each one defaults "
+                "to \"Keep as-is\" — nothing changes unless you pick something else."
+            )
+
+            multi_artist_changes = []
+
+            for i, group in enumerate(multi_artist_candidates):
+                song_count = len(group["songs"])
+                plural = "s" if song_count != 1 else ""
+                label = f"{group['artist']} ({song_count} song{plural})"
+
+                with st.expander(label):
+                    st.caption(f"Parsed as: {', '.join(group['candidates'])}")
+
+                    action = st.segmented_control(
+                        "Action",
+                        ["Keep as-is", "Feature one artist", "Join with &", "Join with /"],
+                        default="Keep as-is",
+                        required=True,
+                        key=f"multi_artist_action_{i}",
+                    )
+
+                    if action == "Feature one artist":
+                        primary_name = st.selectbox(
+                            "Which artist stays in the Artist field?",
+                            group["candidates"],
+                            key=f"multi_artist_primary_{i}",
+                        )
+                        primary_index = group["candidates"].index(primary_name)
+                        remaining = [
+                            name
+                            for j, name in enumerate(group["candidates"])
+                            if j != primary_index
+                        ]
+                        st.caption(
+                            f'Preview: Artist → "{primary_name}"; Title gets '
+                            f'"(feat. {", ".join(remaining)})" appended'
+                        )
+                        multi_artist_changes.extend(build_feature_choice(group, primary_index))
+
+                    elif action == "Join with &":
+                        new_artist = SEPARATOR_AMPERSAND.join(group["candidates"])
+                        st.caption(f'Preview: Artist → "{new_artist}"')
+                        multi_artist_changes.extend(
+                            build_separator_choice(group, SEPARATOR_AMPERSAND)
+                        )
+
+                    elif action == "Join with /":
+                        new_artist = SEPARATOR_SLASH.join(group["candidates"])
+                        st.caption(f'Preview: Artist → "{new_artist}"')
+                        multi_artist_changes.extend(
+                            build_separator_choice(group, SEPARATOR_SLASH)
+                        )
+
+            st.warning(f"{len(multi_artist_changes)} file(s) will be changed.")
+
+            confirm_multi_artist = st.checkbox(
+                "I've reviewed my choices above and want to apply them "
+                "(a backup is made first)",
+                key="confirm_multi_artist",
+            )
+
+            if st.button(
+                "Apply Multi-Artist Changes",
+                type="primary",
+                disabled=not confirm_multi_artist or not multi_artist_changes,
+            ):
+                multi_artist_plan = {
+                    "total_changes": len(multi_artist_changes),
+                    "changes": multi_artist_changes,
+                }
+
+                multi_artist_results = apply_changes(multi_artist_plan, dry_run=False)
+
+                successful = sum(1 for r in multi_artist_results if r["status"] == "updated")
+                failed = sum(1 for r in multi_artist_results if r["status"] == "failed")
+
+                message = f"Updated {successful} file(s)."
                 if failed:
                     message += f" {failed} failed."
 

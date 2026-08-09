@@ -33,6 +33,7 @@ from tesla_music.artwork import (
     flatten_group,
     print_artwork_report,
 )
+from tesla_music.multi_artist import find_multi_artist_credits
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -333,6 +334,29 @@ def main():
                     print(f"    - {song.path.name}")
 
             print()
+
+    print("Multi-Artist Credits:")
+    print("======================")
+    print()
+
+    multi_artist_candidates = find_multi_artist_credits(report["artist_songs"])
+
+    if not multi_artist_candidates:
+        print("✅ No ambiguous multi-artist credits found.")
+        print()
+
+    else:
+        for candidate in multi_artist_candidates:
+            print(f"{candidate['artist']} ({len(candidate['songs'])} songs)")
+            print(f"  Parsed as: {', '.join(candidate['candidates'])}")
+
+        print()
+        print(
+            f"{len(multi_artist_candidates)} credit(s) found. Each one could be a "
+            "genuine duet, a group name, or a song that should feature one artist "
+            "in the title — open the Streamlit app to review and decide each one."
+        )
+        print()
 
     dedup_changes = build_change_plan(recommendations)["changes"] if recommendations else []
     album_changes = (

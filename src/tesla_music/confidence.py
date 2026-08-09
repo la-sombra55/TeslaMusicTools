@@ -1,3 +1,6 @@
+import unicodedata
+
+
 def calculate_confidence(artist1, artist2):
     """
     Returns a confidence score and explanation
@@ -20,6 +23,12 @@ def calculate_confidence(artist1, artist2):
                 "reason": "Capitalization difference only",
             }
 
+        if strip_accents(artist1.lower()) == strip_accents(artist2.lower()):
+            return {
+                "score": 95,
+                "reason": "Accent difference only",
+            }
+
         return {
             "score": 85,
             "reason": "Word order difference",
@@ -40,8 +49,15 @@ def calculate_confidence(artist1, artist2):
     }
 
 
+def strip_accents(name):
+    decomposed = unicodedata.normalize("NFKD", name)
+
+    return "".join(char for char in decomposed if not unicodedata.combining(char))
+
+
 def normalize(name):
     name = name.lower()
+    name = strip_accents(name)
 
     replacements = {
         "-": " ",
