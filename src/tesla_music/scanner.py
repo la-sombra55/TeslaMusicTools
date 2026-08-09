@@ -11,13 +11,14 @@ AUDIO_EXTENSIONS = {
 }
 
 
-def scan_library(folder=None):
+def scan_library(folder=None, extensions=None):
     folder = Path(folder) if folder else MUSIC_FOLDER
+    extensions = extensions or AUDIO_EXTENSIONS
 
     songs = []
 
     for file in folder.rglob("*"):
-        if file.is_file() and file.suffix.lower() in AUDIO_EXTENSIONS:
+        if file.is_file() and file.suffix.lower() in extensions:
             songs.append(file)
 
     return songs

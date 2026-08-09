@@ -34,6 +34,13 @@ from tesla_music.artwork import (
     print_artwork_report,
 )
 from tesla_music.multi_artist import find_multi_artist_credits
+from tesla_music.duplicates import (
+    DUPLICATE_SCAN_EXTENSIONS,
+    apply_duplicate_moves,
+    build_duplicate_plan,
+    find_duplicate_songs,
+    print_duplicate_report,
+)
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -83,6 +90,12 @@ def get_args():
         "--add-artwork",
         action="store_true",
         help="Search iTunes for missing album art and embed it"
+    )
+
+    parser.add_argument(
+        "--find-duplicates",
+        action="store_true",
+        help="Find duplicate songs (same title + duration) and move extras to data/output/duplicates_review"
     )
 
     return parser.parse_args()
@@ -196,6 +209,37 @@ def run_add_artwork(args):
 
     print_artwork_report(results)
 
+def _short_path(path_str):
+    path = Path(path_str)
+    return "/".join(path.parts[-2:]) if len(path.parts) > 1 else path.name
+
+def run_find_duplicates(args):
+    songs = scan_library(args.library, extensions=DUPLICATE_SCAN_EXTENSIONS)
+    _, artist_songs = analyzer.analyze_artists(songs)
+
+    duplicate_groups = find_duplicate_songs(artist_songs)
+    plan = build_duplicate_plan(duplicate_groups)
+
+    print()
+    print(f"🔍 Found {plan['total_files']} duplicate file(s) to review")
+    print("=====================================================")
+    print()
+
+    if not plan["changes"]:
+        print("✅ No duplicate songs found.")
+        print()
+
+    else:
+        for change in plan["changes"]:
+            print(f"{change['artist']} — {change['title']}")
+            print(f"  Keep: {_short_path(change['keep'])}")
+            print(f"  Move: {_short_path(change['source'])}")
+            print()
+
+    results = apply_duplicate_moves(plan, dry_run=not args.apply)
+
+    print_duplicate_report(results)
+
 def main():
     args = get_args()
     print("🚗 Tesla Music Tools")
@@ -219,6 +263,10 @@ def main():
 
     if args.add_artwork:
         run_add_artwork(args)
+        return
+
+    if args.find_duplicates:
+        run_find_duplicates(args)
         return
 
     report = analyzer.run(args.library)

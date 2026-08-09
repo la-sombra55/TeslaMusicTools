@@ -13,6 +13,12 @@ from tesla_music.artwork import (
     search_artwork_alternate,
 )
 from tesla_music.backup import list_backup_sessions
+from tesla_music.duplicates import (
+    DUPLICATE_SCAN_EXTENSIONS,
+    apply_duplicate_moves,
+    build_duplicate_plan,
+    find_duplicate_songs,
+)
 from tesla_music.feat_normalizer import find_featured_artist_changes
 from tesla_music.flattener import apply_flatten, build_flatten_plan
 from tesla_music.multi_artist import (
@@ -67,13 +73,14 @@ def build_combined_plan(report):
 st.set_page_config(page_title="Tesla Music Tools", page_icon="🚗")
 st.title("🚗 Tesla Music Tools")
 
-tab_cleanup, tab_flatten, tab_restore, tab_artwork, tab_multi_artist = st.tabs(
+tab_cleanup, tab_flatten, tab_restore, tab_artwork, tab_multi_artist, tab_duplicates = st.tabs(
     [
         "Clean Up Library",
         "Flatten for USB",
         "Backups & Restore",
         "Add Artwork",
         "Multi-Artist Credits",
+        "Duplicate Songs",
     ]
 )
 
@@ -525,6 +532,70 @@ with tab_multi_artist:
                 failed = sum(1 for r in multi_artist_results if r["status"] == "failed")
 
                 message = f"Updated {successful} file(s)."
+                if failed:
+                    message += f" {failed} failed."
+
+                st.success(message)
+
+with tab_duplicates:
+    st.header("Find duplicate songs")
+    st.write(
+        "Finds songs that look like the same recording appearing more than "
+        "once — same title and duration within a couple seconds — scoped per "
+        "artist so two different songs that happen to share a generic title "
+        "(like \"Intro\") are never confused. Also checks `.m4p` (DRM) files "
+        "for read-only comparison, though nothing ever writes to them."
+    )
+    st.caption(
+        "Duplicates are moved to data/output/duplicates_review — nothing is "
+        "deleted. The copy judged the best (not DRM, not an auto-renamed "
+        "\" 1\"/\"(1)\" file) is kept in place."
+    )
+
+    duplicates_library_path = st.text_input(
+        "Library path", value="data/input", key="duplicates_library_path"
+    )
+
+    if st.button("Find Duplicate Songs", type="primary"):
+        with st.spinner("Scanning library..."):
+            duplicate_songs = scan_library(
+                duplicates_library_path, extensions=DUPLICATE_SCAN_EXTENSIONS
+            )
+            _, duplicate_artist_songs = analyzer.analyze_artists(duplicate_songs)
+            duplicate_groups = find_duplicate_songs(duplicate_artist_songs)
+            st.session_state["duplicate_plan"] = build_duplicate_plan(duplicate_groups)
+
+    duplicate_plan = st.session_state.get("duplicate_plan")
+
+    if duplicate_plan is not None:
+        if duplicate_plan["total_files"] == 0:
+            st.success("✅ No duplicate songs found.")
+
+        else:
+            st.info(f"Found {duplicate_plan['total_files']} duplicate file(s) to review.")
+
+            with st.expander("Show duplicates", expanded=True):
+                for change in duplicate_plan["changes"]:
+                    st.write(f"**{change['artist']} — {change['title']}**")
+                    st.caption(f"Keep: {change['keep']}")
+                    st.caption(f"Move: {change['source']}")
+
+            confirm_duplicates = st.checkbox(
+                "I've reviewed the list above and want to move these duplicates "
+                "out of my library (nothing is deleted)"
+            )
+
+            if st.button(
+                "Move Duplicates to Review Folder",
+                type="primary",
+                disabled=not confirm_duplicates,
+            ):
+                duplicate_results = apply_duplicate_moves(duplicate_plan, dry_run=False)
+
+                moved = sum(1 for r in duplicate_results if r["status"] == "moved")
+                failed = sum(1 for r in duplicate_results if r["status"] == "failed")
+
+                message = f"Moved {moved} file(s) to data/output/duplicates_review."
                 if failed:
                     message += f" {failed} failed."
 

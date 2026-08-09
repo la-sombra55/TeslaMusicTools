@@ -37,3 +37,21 @@ def test_scan_library_explicit_folder_overrides_default(tmp_path, monkeypatch):
     songs = scanner.scan_library(tmp_path)
 
     assert {song.name for song in songs} == {"top.mp3"}
+
+
+def test_scan_library_default_extensions_exclude_m4p(tmp_path):
+    (tmp_path / "top.mp3").write_bytes(b"")
+    (tmp_path / "drm.m4p").write_bytes(b"")
+
+    songs = scanner.scan_library(tmp_path)
+
+    assert {song.name for song in songs} == {"top.mp3"}
+
+
+def test_scan_library_accepts_custom_extensions(tmp_path):
+    (tmp_path / "top.mp3").write_bytes(b"")
+    (tmp_path / "drm.m4p").write_bytes(b"")
+
+    songs = scanner.scan_library(tmp_path, extensions={".m4p"})
+
+    assert {song.name for song in songs} == {"drm.m4p"}
