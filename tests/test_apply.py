@@ -125,3 +125,50 @@ def test_print_apply_report_shows_title_change_when_present(capsys):
 
     output = capsys.readouterr().out
     assert "Title: Girls Like You → Girls Like You (feat. Cardi B)" in output
+
+
+def test_successful_apply_writes_album_tag_when_present(monkeypatch):
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/b.mp3")
+    )
+
+    captured_tags = {}
+
+    def fake_update_tags(file_path, tags):
+        captured_tags.update(tags)
+        return True
+
+    monkeypatch.setattr(apply, "update_tags", fake_update_tags)
+
+    plan = _plan(
+        [
+            {
+                "file": "b.mp3",
+                "artist": "T.I.",
+                "current_album": "The King",
+                "new_album": "The KING",
+            }
+        ]
+    )
+
+    results = apply.apply_changes(plan, dry_run=False)
+
+    assert captured_tags == {"album": "The KING"}
+    assert results[0]["current_album"] == "The King"
+    assert results[0]["new_album"] == "The KING"
+
+
+def test_print_apply_report_shows_album_change_when_present(capsys):
+    results = [
+        {
+            "file": "b.mp3",
+            "current_album": "The King",
+            "new_album": "The KING",
+            "status": "updated",
+        }
+    ]
+
+    apply.print_apply_report(results)
+
+    output = capsys.readouterr().out
+    assert "Album: The King → The KING" in output

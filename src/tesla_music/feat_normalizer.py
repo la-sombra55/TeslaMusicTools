@@ -2,7 +2,7 @@ import re
 
 
 FEAT_SPLIT_PATTERN = re.compile(
-    r"\s*[\(\[]?\s*(?:featuring|feat\.?|ft\.?)\s+(.+?)\s*[\)\]]?$",
+    r"\s*[\(\[]?\s*(?<!\w)(?:featuring|feat\.?|ft\.?)\s+(.+?)\s*[\)\]]?$",
     re.IGNORECASE,
 )
 

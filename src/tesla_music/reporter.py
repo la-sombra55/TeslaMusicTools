@@ -18,8 +18,10 @@ def build_review_report(plan):
 
     for change in plan["changes"]:
         group_key = (
-            change["current_artist"],
-            change["new_artist"],
+            change.get("current_artist"),
+            change.get("new_artist"),
+            change.get("current_album"),
+            change.get("new_album"),
         )
 
         if group_key != current_group:
@@ -28,12 +30,25 @@ def build_review_report(plan):
             lines.append("")
             lines.append("------------------------------")
             lines.append("")
-            lines.append(
-                f"Current artist: {change['current_artist']}"
-            )
-            lines.append(
-                f"New artist: {change['new_artist']}"
-            )
+
+            if change.get("new_artist") is not None:
+                lines.append(
+                    f"Current artist: {change['current_artist']}"
+                )
+                lines.append(
+                    f"New artist: {change['new_artist']}"
+                )
+
+            if change.get("new_album") is not None:
+                if change.get("artist"):
+                    lines.append(f"Artist: {change['artist']}")
+                lines.append(
+                    f"Current album: {change['current_album']}"
+                )
+                lines.append(
+                    f"New album: {change['new_album']}"
+                )
+
             lines.append(
                 f"Confidence: {change['confidence']}% ({change['reason']})"
             )

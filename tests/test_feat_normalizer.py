@@ -26,6 +26,16 @@ def test_split_featured_artist_returns_none_when_no_match():
     assert split_featured_artist("Jay-Z & Kanye West") is None
 
 
+def test_split_featured_artist_does_not_match_ft_fused_inside_a_word():
+    # Regression test: "Daft Punk" contains "ft" as a substring ("Da" + "ft"),
+    # which was previously misdetected as "Da" featuring "Punk".
+    assert split_featured_artist("Daft Punk") is None
+
+
+def test_split_featured_artist_does_not_match_feat_fused_inside_a_word():
+    assert split_featured_artist("Defeat Devices") is None
+
+
 def test_build_feat_title_appends_when_missing():
     assert build_feat_title("Girls Like You", "Cardi B") == "Girls Like You (feat. Cardi B)"
 

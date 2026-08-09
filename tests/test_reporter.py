@@ -68,6 +68,58 @@ def test_build_review_report_shows_title_change_when_present():
     assert 'Title: "Girls Like You" → "Girls Like You (feat. Cardi B)"' in report
 
 
+def test_build_review_report_shows_album_change_when_present():
+    plan = {
+        "total_changes": 1,
+        "changes": [
+            {
+                "file": "b.mp3",
+                "artist": "T.I.",
+                "current_album": "The King",
+                "new_album": "The KING",
+                "confidence": 95,
+                "reason": "Capitalization difference only",
+            }
+        ],
+    }
+
+    report = build_review_report(plan)
+
+    assert "Artist: T.I." in report
+    assert "Current album: The King" in report
+    assert "New album: The KING" in report
+    assert "Confidence: 95% (Capitalization difference only)" in report
+    assert "b.mp3" in report
+
+
+def test_build_review_report_separates_album_groups_by_artist():
+    plan = {
+        "total_changes": 2,
+        "changes": [
+            {
+                "file": "a.mp3",
+                "artist": "T.I.",
+                "current_album": "The King",
+                "new_album": "The KING",
+                "confidence": 95,
+                "reason": "Capitalization difference only",
+            },
+            {
+                "file": "b.mp3",
+                "artist": "Kid Cudi",
+                "current_album": "A KiD Named CuDi",
+                "new_album": "A Kid Named Cudi",
+                "confidence": 95,
+                "reason": "Capitalization difference only",
+            },
+        ],
+    }
+
+    report = build_review_report(plan)
+
+    assert report.count("Current album:") == 2
+
+
 def test_save_review_report_writes_text(tmp_path):
     output_path = tmp_path / "change_report.txt"
 

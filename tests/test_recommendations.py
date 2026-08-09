@@ -1,4 +1,4 @@
-from tesla_music.recommendations import build_recommendations
+from tesla_music.recommendations import build_album_recommendations, build_recommendations
 
 
 def test_keeps_the_artist_with_the_highest_count(make_song):
@@ -75,3 +75,69 @@ def test_supports_groups_with_more_than_two_variants(make_song):
         "jay-z & kanye west",
         "JAY Z & Kanye West",
     ]
+
+
+def test_build_album_recommendations_keeps_the_album_with_the_highest_count(make_song):
+    album_groups_by_artist = {
+        "T.I.": [
+            {
+                "albums": [
+                    {"album": "The KING", "count": 15},
+                    {"album": "The King", "count": 1},
+                ],
+                "score": 95,
+                "reason": "Capitalization difference only",
+            }
+        ]
+    }
+    artist_songs = {
+        "T.I.": [
+            *[make_song(f"a{i}.mp3", artist="T.I.", album="The KING") for i in range(15)],
+            make_song("b.mp3", artist="T.I.", album="The King"),
+        ]
+    }
+
+    recommendations = build_album_recommendations(album_groups_by_artist, artist_songs)
+
+    assert len(recommendations) == 1
+    recommendation = recommendations[0]
+    assert recommendation["artist"] == "T.I."
+    assert recommendation["keep"] == "The KING"
+    assert recommendation["keep_count"] == 15
+    assert recommendation["confidence"] == 95
+    assert len(recommendation["change"]) == 1
+    assert recommendation["change"][0]["album"] == "The King"
+    assert [s.path.name for s in recommendation["change"][0]["songs"]] == ["b.mp3"]
+
+
+def test_build_album_recommendations_does_not_mix_up_different_artists(make_song):
+    album_groups_by_artist = {
+        "Artist A": [
+            {
+                "albums": [
+                    {"album": "Greatest Hits", "count": 10},
+                    {"album": "greatest hits", "count": 1},
+                ],
+                "score": 95,
+                "reason": "Capitalization difference only",
+            }
+        ]
+    }
+    artist_songs = {
+        "Artist A": [
+            *[make_song(f"a{i}.mp3", artist="Artist A", album="Greatest Hits") for i in range(10)],
+            make_song("b.mp3", artist="Artist A", album="greatest hits"),
+        ],
+        "Artist B": [make_song("c.mp3", artist="Artist B", album="greatest hits")],
+    }
+
+    recommendations = build_album_recommendations(album_groups_by_artist, artist_songs)
+
+    assert len(recommendations) == 1
+    assert recommendations[0]["change"][0]["songs"] == [
+        artist_songs["Artist A"][-1]
+    ]
+
+
+def test_build_album_recommendations_returns_empty_for_no_duplicates():
+    assert build_album_recommendations({}, {}) == []

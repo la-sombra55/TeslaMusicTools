@@ -4,9 +4,9 @@ from pathlib import Path
 
 from tesla_music import analyzer
 from tesla_music.scanner import scan_library
-from tesla_music.recommendations import build_recommendations
+from tesla_music.recommendations import build_album_recommendations, build_recommendations
 from tesla_music.feat_normalizer import find_featured_artist_changes
-from tesla_music.planner import build_change_plan, build_plan, save_plan
+from tesla_music.planner import build_album_change_plan, build_change_plan, build_plan, save_plan
 from tesla_music.reporter import (
     build_review_report,
     save_review_report,
@@ -300,8 +300,47 @@ def main():
             print(f"  Title:  {change['current_title']} → {change['new_title']}")
             print()
 
+    print("Album Name Cleanup:")
+    print("====================")
+    print()
+
+    album_recommendations = build_album_recommendations(
+        report["album_groups"], report["artist_songs"]
+    )
+
+    if not album_recommendations:
+        print("✅ No duplicate album spellings found.")
+        print()
+
+    else:
+        for recommendation in album_recommendations:
+            print(
+                f"{recommendation['artist']} — Keep: {recommendation['keep']} "
+                f"({recommendation['keep_count']} songs)"
+            )
+            print(
+                f"  Confidence: {recommendation['confidence']}% "
+                f"({recommendation['reason']})"
+            )
+
+            for change in recommendation["change"]:
+                print(
+                    f"  Change: {change['album']} "
+                    f"({change['count']} songs)"
+                )
+
+                for song in change["songs"]:
+                    print(f"    - {song.path.name}")
+
+            print()
+
     dedup_changes = build_change_plan(recommendations)["changes"] if recommendations else []
-    all_changes = dedup_changes + feat_changes
+    album_changes = (
+        build_album_change_plan(album_recommendations)["changes"]
+        if album_recommendations
+        else []
+    )
+    all_changes = dedup_changes + feat_changes + album_changes
 
     if all_changes:
         plan = build_plan(all_changes)

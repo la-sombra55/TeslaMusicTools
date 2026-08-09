@@ -1,6 +1,6 @@
 from collections import Counter, defaultdict
 
-from tesla_music.normalizer import find_similar_artists
+from tesla_music.normalizer import find_album_duplicates_by_artist, find_similar_artists
 from tesla_music.metadata import read_metadata
 from tesla_music.scanner import scan_library
 
@@ -45,6 +45,7 @@ def run(library_path=None):
     "artists": artists,
     "artist_songs": artist_songs,
     "artist_groups": find_similar_artists(artists),
+    "album_groups": find_album_duplicates_by_artist(artist_songs),
     "formats": formats,
     "format_songs": format_songs,
 }

@@ -1,6 +1,6 @@
 import json
 
-from tesla_music.planner import build_change_plan, save_plan
+from tesla_music.planner import build_album_change_plan, build_change_plan, save_plan
 
 
 def test_build_change_plan_flattens_songs_into_file_changes(make_song):
@@ -45,6 +45,43 @@ def test_build_change_plan_handles_no_recommendations():
     plan = build_change_plan([])
 
     assert plan == {"total_changes": 0, "changes": []}
+
+
+def test_build_album_change_plan_flattens_songs_into_file_changes(make_song):
+    recommendations = [
+        {
+            "artist": "T.I.",
+            "keep": "The KING",
+            "keep_count": 15,
+            "confidence": 95,
+            "reason": "Capitalization difference only",
+            "change": [
+                {
+                    "album": "The King",
+                    "count": 1,
+                    "songs": [make_song("b.mp3")],
+                }
+            ],
+        }
+    ]
+
+    plan = build_album_change_plan(recommendations)
+
+    assert plan["total_changes"] == 1
+    assert plan["changes"] == [
+        {
+            "file": "b.mp3",
+            "artist": "T.I.",
+            "current_album": "The King",
+            "new_album": "The KING",
+            "confidence": 95,
+            "reason": "Capitalization difference only",
+        }
+    ]
+
+
+def test_build_album_change_plan_handles_no_recommendations():
+    assert build_album_change_plan([]) == {"total_changes": 0, "changes": []}
 
 
 def test_save_plan_writes_valid_json(tmp_path):

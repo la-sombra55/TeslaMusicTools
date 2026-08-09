@@ -15,8 +15,8 @@ from tesla_music.artwork import (
 from tesla_music.backup import list_backup_sessions
 from tesla_music.feat_normalizer import find_featured_artist_changes
 from tesla_music.flattener import apply_flatten, build_flatten_plan
-from tesla_music.planner import build_change_plan, build_plan
-from tesla_music.recommendations import build_recommendations
+from tesla_music.planner import build_album_change_plan, build_change_plan, build_plan
+from tesla_music.recommendations import build_album_recommendations, build_recommendations
 from tesla_music.restore import apply_restore, build_restore_plan
 from tesla_music.scanner import scan_library
 
@@ -24,9 +24,19 @@ from tesla_music.scanner import scan_library
 def build_combined_plan(report):
     recommendations = build_recommendations(report["artist_groups"], report["artist_songs"])
     feat_changes = find_featured_artist_changes(report["artist_songs"])
+    album_recommendations = build_album_recommendations(
+        report["album_groups"], report["artist_songs"]
+    )
+
     dedup_changes = build_change_plan(recommendations)["changes"] if recommendations else []
-    plan = build_plan(dedup_changes + feat_changes)
-    return recommendations, feat_changes, plan
+    album_changes = (
+        build_album_change_plan(album_recommendations)["changes"]
+        if album_recommendations
+        else []
+    )
+
+    plan = build_plan(dedup_changes + feat_changes + album_changes)
+    return recommendations, feat_changes, album_recommendations, plan
 
 
 st.set_page_config(page_title="Tesla Music Tools", page_icon="🚗")
@@ -59,11 +69,11 @@ with tab_cleanup:
             for extension, count in report["formats"].most_common():
                 st.write(f"**{extension.upper()}**: {count} songs")
 
-        recommendations, feat_changes, plan = build_combined_plan(report)
+        recommendations, feat_changes, album_recommendations, plan = build_combined_plan(report)
 
         st.subheader("Proposed Changes")
 
-        if not recommendations and not feat_changes:
+        if not recommendations and not feat_changes and not album_recommendations:
             st.success("✅ Library is already clean — no changes recommended.")
 
         else:
@@ -91,6 +101,23 @@ with tab_cleanup:
                     with st.expander(Path(change["file"]).name):
                         st.write(f"Artist: {change['current_artist']} → {change['new_artist']}")
                         st.write(f"Title: {change['current_title']} → {change['new_title']}")
+
+            if album_recommendations:
+                st.write("**Duplicate album spellings**")
+
+                for rec in album_recommendations:
+                    label = (
+                        f'{rec["artist"]} — Keep "{rec["keep"]}" — '
+                        f'{rec["confidence"]}% confidence ({rec["reason"]})'
+                    )
+                    with st.expander(label):
+                        for change in rec["change"]:
+                            st.write(
+                                f'"{change["album"]}" → "{rec["keep"]}" '
+                                f'({change["count"]} songs)'
+                            )
+                            for song in change["songs"]:
+                                st.caption(song.path.name)
 
             st.warning(f"{plan['total_changes']} file(s) will be changed.")
 

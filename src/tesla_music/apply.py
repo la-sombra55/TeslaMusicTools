@@ -13,6 +13,9 @@ def _tag_updates(change):
     if change.get("new_title") is not None:
         tags["title"] = change["new_title"]
 
+    if change.get("new_album") is not None:
+        tags["album"] = change["new_album"]
+
     return tags
 
 
@@ -29,6 +32,8 @@ def apply_changes(plan, dry_run=True):
             "new_artist": change.get("new_artist"),
             "current_title": change.get("current_title"),
             "new_title": change.get("new_title"),
+            "current_album": change.get("current_album"),
+            "new_album": change.get("new_album"),
             "status": "pending",
         }
 
@@ -78,6 +83,11 @@ def print_apply_report(results):
         if result.get("new_title") is not None:
             print(
                 f"Title: {result['current_title']} → {result['new_title']}"
+            )
+
+        if result.get("new_album") is not None:
+            print(
+                f"Album: {result['current_album']} → {result['new_album']}"
             )
 
         print(
