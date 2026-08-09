@@ -311,11 +311,12 @@ def _download_image(url):
         return response.read(), response.headers.get_content_type()
 
 
-def apply_artwork(plan, dry_run=True):
+def apply_artwork(plan, dry_run=True, on_progress=None):
     results = []
     backup_root = None if dry_run else new_backup_root()
+    total = len(plan["changes"])
 
-    for change in plan["changes"]:
+    for index, change in enumerate(plan["changes"]):
         result = {
             "file": change["file"],
             "artwork_url": change["artwork_url"],
@@ -340,6 +341,9 @@ def apply_artwork(plan, dry_run=True):
                 result["error"] = str(error)
 
         results.append(result)
+
+        if on_progress is not None:
+            on_progress(index + 1, total)
 
     return results
 

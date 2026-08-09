@@ -140,7 +140,7 @@ def run_restore(args):
 
     print_restore_report(results)
 
-def _print_artwork_progress(start_time):
+def _print_progress(label, unit, start_time):
     def on_progress(completed, total):
         elapsed = time.time() - start_time
         rate = elapsed / completed if completed else 0
@@ -148,7 +148,7 @@ def _print_artwork_progress(start_time):
         percent = round(completed / total * 100) if total else 100
 
         print(
-            f"\rSearching artwork... {completed}/{total} albums/singles "
+            f"\r{label}... {completed}/{total} {unit} "
             f"({percent}%) — ~{eta_seconds}s remaining",
             end="",
             flush=True,
@@ -163,7 +163,8 @@ def run_add_artwork(args):
     report = analyzer.run(args.library)
 
     plan = build_artwork_plan(
-        report["artist_songs"], on_progress=_print_artwork_progress(time.time())
+        report["artist_songs"],
+        on_progress=_print_progress("Searching artwork", "albums/singles", time.time()),
     )
 
     print()
@@ -187,7 +188,11 @@ def run_add_artwork(args):
 
     flat_plan = {"total_files": len(all_changes), "changes": all_changes}
 
-    results = apply_artwork(flat_plan, dry_run=not args.apply)
+    results = apply_artwork(
+        flat_plan,
+        dry_run=not args.apply,
+        on_progress=_print_progress("Embedding artwork", "songs", time.time()),
+    )
 
     print_artwork_report(results)
 

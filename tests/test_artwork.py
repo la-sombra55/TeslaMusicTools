@@ -689,6 +689,45 @@ def test_apply_artwork_records_failure_when_download_fails(monkeypatch):
     assert "network down" in results[0]["error"]
 
 
+def test_apply_artwork_reports_progress_once_per_file_with_known_total(monkeypatch):
+    monkeypatch.setattr(
+        artwork, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
+    monkeypatch.setattr(artwork, "_download_image", lambda url: (b"bytes", "image/jpeg"))
+    monkeypatch.setattr(artwork, "embed_artwork", lambda *a, **k: True)
+
+    progress_calls = []
+
+    plan = {
+        "total_files": 2,
+        "changes": [
+            {"file": "a.mp3", "artwork_url": "https://example.com/a.jpg"},
+            {"file": "b.mp3", "artwork_url": "https://example.com/b.jpg"},
+        ],
+    }
+
+    artwork.apply_artwork(
+        plan, dry_run=False, on_progress=lambda done, total: progress_calls.append((done, total))
+    )
+
+    assert progress_calls == [(1, 2), (2, 2)]
+
+
+def test_apply_artwork_reports_progress_during_dry_run_too():
+    progress_calls = []
+
+    plan = {
+        "total_files": 1,
+        "changes": [{"file": "a.mp3", "artwork_url": "https://example.com/a.jpg"}],
+    }
+
+    artwork.apply_artwork(
+        plan, dry_run=True, on_progress=lambda done, total: progress_calls.append((done, total))
+    )
+
+    assert progress_calls == [(1, 1)]
+
+
 def test_print_artwork_report_summarizes_status_counts(capsys):
     results = [
         {"file": "a.mp3", "artwork_url": "x", "status": "added"},

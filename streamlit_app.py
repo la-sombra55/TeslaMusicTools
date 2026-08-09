@@ -28,6 +28,24 @@ from tesla_music.restore import apply_restore, build_restore_plan
 from tesla_music.scanner import scan_library
 
 
+def _make_progress_callback(progress_bar, label, unit, start_time):
+    def on_progress(completed, total):
+        elapsed = time.time() - start_time
+        rate = elapsed / completed if completed else 0
+        eta_seconds = round(rate * (total - completed))
+        fraction = completed / total if total else 1.0
+
+        eta_text = (
+            f"~{eta_seconds}s remaining" if completed > 0 else "estimating time remaining..."
+        )
+        progress_bar.progress(
+            fraction,
+            text=f"{label}... {completed}/{total} {unit} ({eta_text})",
+        )
+
+    return on_progress
+
+
 def build_combined_plan(report):
     recommendations = build_recommendations(report["artist_groups"], report["artist_songs"])
     feat_changes = find_featured_artist_changes(report["artist_songs"])
@@ -264,22 +282,12 @@ with tab_artwork:
             artwork_report = analyzer.run(artwork_library_path)
 
         progress_bar = st.progress(0, text="Starting artwork search...")
-        start_time = time.time()
-
-        def _update_artwork_progress(completed, total):
-            elapsed = time.time() - start_time
-            rate = elapsed / completed if completed else 0
-            eta_seconds = round(rate * (total - completed))
-            fraction = completed / total if total else 1.0
-
-            eta_text = f"~{eta_seconds}s remaining" if completed > 0 else "estimating time remaining..."
-            progress_bar.progress(
-                fraction,
-                text=f"Searching artwork... {completed}/{total} albums/singles ({eta_text})",
-            )
 
         st.session_state["artwork_plan"] = build_artwork_plan(
-            artwork_report["artist_songs"], on_progress=_update_artwork_progress
+            artwork_report["artist_songs"],
+            on_progress=_make_progress_callback(
+                progress_bar, "Searching artwork", "albums/singles", time.time()
+            ),
         )
 
         progress_bar.empty()
@@ -389,8 +397,17 @@ with tab_artwork:
                     "changes": selected_changes,
                 }
 
-                with st.spinner("Downloading and embedding artwork..."):
-                    artwork_results = apply_artwork(selected_plan, dry_run=False)
+                embed_progress_bar = st.progress(0, text="Starting artwork embedding...")
+
+                artwork_results = apply_artwork(
+                    selected_plan,
+                    dry_run=False,
+                    on_progress=_make_progress_callback(
+                        embed_progress_bar, "Embedding artwork", "songs", time.time()
+                    ),
+                )
+
+                embed_progress_bar.empty()
 
                 added = sum(1 for r in artwork_results if r["status"] == "added")
                 failed = sum(1 for r in artwork_results if r["status"] == "failed")
