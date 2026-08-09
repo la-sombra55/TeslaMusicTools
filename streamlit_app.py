@@ -13,6 +13,7 @@ from tesla_music.artwork import (
     search_artwork_alternate,
 )
 from tesla_music.backup import list_backup_sessions
+from tesla_music.drm_files import apply_drm_moves, build_drm_plan, find_drm_songs
 from tesla_music.duplicates import (
     DUPLICATE_SCAN_EXTENSIONS,
     apply_duplicate_moves,
@@ -73,7 +74,15 @@ def build_combined_plan(report):
 st.set_page_config(page_title="Tesla Music Tools", page_icon="🚗")
 st.title("🚗 Tesla Music Tools")
 
-tab_cleanup, tab_flatten, tab_restore, tab_artwork, tab_multi_artist, tab_duplicates = st.tabs(
+(
+    tab_cleanup,
+    tab_flatten,
+    tab_restore,
+    tab_artwork,
+    tab_multi_artist,
+    tab_duplicates,
+    tab_drm,
+) = st.tabs(
     [
         "Clean Up Library",
         "Flatten for USB",
@@ -81,6 +90,7 @@ tab_cleanup, tab_flatten, tab_restore, tab_artwork, tab_multi_artist, tab_duplic
         "Add Artwork",
         "Multi-Artist Credits",
         "Duplicate Songs",
+        "DRM Files",
     ]
 )
 
@@ -596,6 +606,64 @@ with tab_duplicates:
                 failed = sum(1 for r in duplicate_results if r["status"] == "failed")
 
                 message = f"Moved {moved} file(s) to data/output/duplicates_review."
+                if failed:
+                    message += f" {failed} failed."
+
+                st.success(message)
+
+with tab_drm:
+    st.header("Find DRM-protected files")
+    st.write(
+        "Finds `.m4p` files — Apple's old FairPlay-protected purchases from "
+        "before iTunes dropped DRM in 2009. These can't play in a Tesla, and "
+        "this tool will never write to them (stripping DRM would mean "
+        "circumventing copy protection, which isn't something this tool does). "
+        "If you still have the Apple ID that bought these, most can be "
+        "re-downloaded DRM-free from your purchase history."
+    )
+    st.caption(
+        "Files are moved to data/output/drm_review — nothing is deleted."
+    )
+
+    drm_library_path = st.text_input(
+        "Library path", value="data/input", key="drm_library_path"
+    )
+
+    if st.button("Find DRM Files", type="primary"):
+        with st.spinner("Scanning library..."):
+            drm_songs = find_drm_songs(drm_library_path)
+            st.session_state["drm_plan"] = build_drm_plan(drm_songs)
+
+    drm_plan = st.session_state.get("drm_plan")
+
+    if drm_plan is not None:
+        if drm_plan["total_files"] == 0:
+            st.success("✅ No DRM-protected files found.")
+
+        else:
+            st.info(f"Found {drm_plan['total_files']} DRM-protected file(s).")
+
+            with st.expander("Show files", expanded=True):
+                for change in drm_plan["changes"]:
+                    st.write(f"**{change['artist']} — {change['title']}**")
+                    st.caption(change["source"])
+
+            confirm_drm = st.checkbox(
+                "I've reviewed the list above and want to move these out of "
+                "my library (nothing is deleted)"
+            )
+
+            if st.button(
+                "Move DRM Files to Review Folder",
+                type="primary",
+                disabled=not confirm_drm,
+            ):
+                drm_results = apply_drm_moves(drm_plan, dry_run=False)
+
+                moved = sum(1 for r in drm_results if r["status"] == "moved")
+                failed = sum(1 for r in drm_results if r["status"] == "failed")
+
+                message = f"Moved {moved} file(s) to data/output/drm_review."
                 if failed:
                     message += f" {failed} failed."
 

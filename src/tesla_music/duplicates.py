@@ -6,6 +6,7 @@ from pathlib import Path
 from mutagen import File
 
 from tesla_music.confidence import normalize
+from tesla_music.paths import mirrored_path
 from tesla_music.scanner import AUDIO_EXTENSIONS
 
 DUPLICATE_SCAN_EXTENSIONS = AUDIO_EXTENSIONS | {".m4p"}
@@ -96,15 +97,6 @@ def _file_preference_score(song):
     return score
 
 
-def _mirrored_path(file_path):
-    file_path = Path(file_path)
-
-    if file_path.is_absolute():
-        file_path = file_path.relative_to(file_path.anchor)
-
-    return file_path
-
-
 def build_duplicate_plan(duplicate_groups, destination_folder="data/output/duplicates_review"):
     destination_folder = Path(destination_folder)
     changes = []
@@ -118,7 +110,7 @@ def build_duplicate_plan(duplicate_groups, destination_folder="data/output/dupli
             changes.append(
                 {
                     "source": str(duplicate_song.path),
-                    "destination": str(destination_folder / _mirrored_path(duplicate_song.path)),
+                    "destination": str(destination_folder / mirrored_path(duplicate_song.path)),
                     "keep": str(keep.path),
                     "artist": group["artist"],
                     "title": group["title"],

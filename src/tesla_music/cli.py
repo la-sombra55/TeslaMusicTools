@@ -41,6 +41,12 @@ from tesla_music.duplicates import (
     find_duplicate_songs,
     print_duplicate_report,
 )
+from tesla_music.drm_files import (
+    apply_drm_moves,
+    build_drm_plan,
+    find_drm_songs,
+    print_drm_report,
+)
 
 def get_args():
     parser = argparse.ArgumentParser(
@@ -96,6 +102,12 @@ def get_args():
         "--find-duplicates",
         action="store_true",
         help="Find duplicate songs (same title + duration) and move extras to data/output/duplicates_review"
+    )
+
+    parser.add_argument(
+        "--find-drm-files",
+        action="store_true",
+        help="Find DRM-protected .m4p files (can't play in a Tesla) and move them to data/output/drm_review"
     )
 
     return parser.parse_args()
@@ -240,6 +252,36 @@ def run_find_duplicates(args):
 
     print_duplicate_report(results)
 
+def run_find_drm_files(args):
+    songs = find_drm_songs(args.library)
+    plan = build_drm_plan(songs)
+
+    print()
+    print(f"🔒 Found {plan['total_files']} DRM-protected file(s)")
+    print("=====================================================")
+    print()
+
+    if not plan["changes"]:
+        print("✅ No DRM-protected files found.")
+        print()
+
+    else:
+        print(
+            "These are Apple's old FairPlay-protected purchases — they can't "
+            "play in a Tesla, and this tool will never write to them. Consider "
+            "re-downloading them DRM-free from your Apple purchase history."
+        )
+        print()
+
+        for change in plan["changes"]:
+            print(f"{change['artist']} — {change['title']}")
+            print(f"  {_short_path(change['source'])}")
+            print()
+
+    results = apply_drm_moves(plan, dry_run=not args.apply)
+
+    print_drm_report(results)
+
 def main():
     args = get_args()
     print("🚗 Tesla Music Tools")
@@ -267,6 +309,10 @@ def main():
 
     if args.find_duplicates:
         run_find_duplicates(args)
+        return
+
+    if args.find_drm_files:
+        run_find_drm_files(args)
         return
 
     report = analyzer.run(args.library)
