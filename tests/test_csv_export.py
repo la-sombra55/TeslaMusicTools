@@ -1,0 +1,104 @@
+import csv
+
+from tesla_music.csv_export import build_csv_rows, write_csv_export
+
+
+def test_build_csv_rows_includes_expected_fields(make_song):
+    artist_songs = {
+        "Chris Brown": [
+            make_song(
+                "data/input/Chris Brown/Fortune/01 Turn Up.mp3",
+                artist="Chris Brown",
+                album_artist="Chris Brown",
+                album="Fortune",
+                title="Turn Up the Music",
+            )
+        ]
+    }
+
+    rows = build_csv_rows(artist_songs)
+
+    assert rows == [
+        {
+            "artist": "Chris Brown",
+            "album_artist": "Chris Brown",
+            "album": "Fortune",
+            "title": "Turn Up the Music",
+            "format": "mp3",
+            "file_path": "data/input/Chris Brown/Fortune/01 Turn Up.mp3",
+        }
+    ]
+
+
+def test_build_csv_rows_lowercases_format_from_any_case_extension(make_song):
+    artist_songs = {"2Pac": [make_song("a.M4A", artist="2Pac", title="Song")]}
+
+    rows = build_csv_rows(artist_songs)
+
+    assert rows[0]["format"] == "m4a"
+
+
+def test_build_csv_rows_covers_every_song_across_every_artist(make_song):
+    artist_songs = {
+        "Chris Brown": [make_song("a.mp3", artist="Chris Brown"), make_song("b.mp3", artist="Chris Brown")],
+        "Beyoncé": [make_song("c.mp3", artist="Beyoncé")],
+    }
+
+    rows = build_csv_rows(artist_songs)
+
+    assert len(rows) == 3
+
+
+def test_build_csv_rows_handles_no_songs():
+    assert build_csv_rows({}) == []
+
+
+def test_write_csv_export_writes_a_real_readable_csv(tmp_path):
+    rows = [
+        {
+            "artist": "Chris Brown",
+            "album_artist": "Chris Brown",
+            "album": "Fortune",
+            "title": "Turn Up the Music",
+            "format": "mp3",
+            "file_path": "data/input/Chris Brown/Fortune/01 Turn Up.mp3",
+        }
+    ]
+    destination = tmp_path / "export.csv"
+
+    result = write_csv_export(rows, destination)
+
+    assert result == destination
+    assert destination.exists()
+
+    with open(destination, newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        read_rows = list(reader)
+
+    assert read_rows == rows
+
+
+def test_write_csv_export_creates_missing_destination_folders(tmp_path):
+    destination = tmp_path / "nested" / "deep" / "export.csv"
+
+    write_csv_export([], destination)
+
+    assert destination.exists()
+
+
+def test_write_csv_export_writes_header_even_with_no_rows(tmp_path):
+    destination = tmp_path / "export.csv"
+
+    write_csv_export([], destination)
+
+    with open(destination, newline="", encoding="utf-8") as file:
+        reader = csv.DictReader(file)
+        assert reader.fieldnames == [
+            "artist",
+            "album_artist",
+            "album",
+            "title",
+            "format",
+            "file_path",
+        ]
+        assert list(reader) == []

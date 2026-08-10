@@ -1,4 +1,4 @@
-from tesla_music.flattener import apply_flatten, build_flatten_plan
+from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
 
 
 def test_build_flatten_plan_keeps_original_filename():
@@ -30,6 +30,63 @@ def test_build_flatten_plan_returns_empty_for_no_files():
     plan = build_flatten_plan([], "out")
 
     assert plan == {"total_files": 0, "destination_folder": "out", "changes": []}
+
+
+def test_build_artist_folder_plan_groups_songs_under_their_artist(make_song):
+    artist_songs = {
+        "Chris Brown": [
+            make_song("Chris Brown/Fortune/01 Turn Up.mp3", artist="Chris Brown"),
+            make_song("Chris Brown/Graffiti/02 Sing.mp3", artist="Chris Brown"),
+        ],
+        "Beyoncé": [make_song("Beyoncé/B'Day/01 Deja Vu.mp3", artist="Beyoncé")],
+    }
+
+    plan = build_artist_folder_plan(artist_songs, "data/output/by_artist")
+
+    assert plan["total_files"] == 3
+    destinations = {c["destination"] for c in plan["changes"]}
+    assert destinations == {
+        "data/output/by_artist/Chris Brown/01 Turn Up.mp3",
+        "data/output/by_artist/Chris Brown/02 Sing.mp3",
+        "data/output/by_artist/Beyoncé/01 Deja Vu.mp3",
+    }
+
+
+def test_build_artist_folder_plan_disambiguates_collisions_within_one_artist(make_song):
+    artist_songs = {
+        "2Pac": [
+            make_song("2Pac/Album A/01 Intro.mp3", artist="2Pac"),
+            make_song("2Pac/Album B/01 Intro.mp3", artist="2Pac"),
+        ],
+    }
+
+    plan = build_artist_folder_plan(artist_songs, "out")
+
+    destinations = [c["destination"] for c in plan["changes"]]
+    assert destinations == [
+        "out/2Pac/01 Intro.mp3",
+        "out/2Pac/01 Intro (2).mp3",
+    ]
+
+
+def test_build_artist_folder_plan_sanitizes_slashes_in_artist_names(make_song):
+    artist_songs = {
+        "Fabolous/P. Diddy/Jagged Edge": [
+            make_song("a.mp3", artist="Fabolous/P. Diddy/Jagged Edge")
+        ],
+    }
+
+    plan = build_artist_folder_plan(artist_songs, "out")
+
+    assert plan["changes"][0]["destination"] == "out/Fabolous-P. Diddy-Jagged Edge/a.mp3"
+
+
+def test_build_artist_folder_plan_handles_no_songs():
+    assert build_artist_folder_plan({}, "out") == {
+        "total_files": 0,
+        "destination_folder": "out",
+        "changes": [],
+    }
 
 
 def test_apply_flatten_dry_run_does_not_copy_files(tmp_path):

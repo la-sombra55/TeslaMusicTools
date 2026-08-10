@@ -23,7 +23,8 @@ from tesla_music.duplicates import (
     find_duplicate_songs,
 )
 from tesla_music.feat_normalizer import find_featured_artist_changes
-from tesla_music.flattener import apply_flatten, build_flatten_plan
+from tesla_music.csv_export import build_csv_rows, write_csv_export
+from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
 from tesla_music.multi_artist import (
     SEPARATOR_AMPERSAND,
     SEPARATOR_SLASH,
@@ -145,7 +146,7 @@ def _render_artwork_progress_fragment():
     )
 
 
-def _pick_folder_macos():
+def _pick_folder_macos(prompt="Select a folder"):
     """
     Opens a native macOS "Choose Folder" dialog via AppleScript and returns
     the chosen path, or None if unavailable/cancelled. macOS-only.
@@ -153,8 +154,7 @@ def _pick_folder_macos():
     script = (
         'tell application "System Events"\n'
         "activate\n"
-        'return POSIX path of (choose folder with prompt '
-        '"Select your music library folder")\n'
+        f'return POSIX path of (choose folder with prompt "{prompt}")\n'
         "end tell"
     )
 
@@ -174,6 +174,34 @@ def _pick_folder_macos():
     path = result.stdout.strip()
 
     return path or None
+
+
+def _folder_picker_input(label, key, default_value, prompt="Select a folder"):
+    """
+    Renders a text input + "Browse..." button pair for picking a folder,
+    wiring the native macOS picker into the given session_state key.
+    The button's handling runs before the text_input is instantiated, since
+    Streamlit forbids writing to a widget's key after that widget has
+    already been created in the current script run.
+    """
+    if key not in st.session_state:
+        st.session_state[key] = default_value
+
+    picker_col, button_col = st.columns([4, 1])
+
+    with button_col:
+        browse_clicked = st.button("Browse...", key=f"{key}_browse")
+
+    if browse_clicked:
+        chosen_folder = _pick_folder_macos(prompt)
+
+        if chosen_folder:
+            st.session_state[key] = chosen_folder
+
+    with picker_col:
+        st.text_input(label, key=key, label_visibility="collapsed")
+
+    return st.session_state[key]
 
 
 def _print_apply_results(results):
@@ -701,6 +729,136 @@ def _render_artwork_tool():
         st.success(message)
 
 
+def _render_flatten_export():
+    st.write(
+        "Copies every song out of its nested Artist/Album folders into one "
+        "flat folder, keeping original filenames. Your library is untouched."
+    )
+
+    destination = _folder_picker_input(
+        "Destination folder",
+        key="flatten_destination",
+        default_value="data/output/flattened",
+        prompt="Select a destination folder",
+    )
+
+    if st.button("Preview Export", key="flatten_preview"):
+        artist_songs = st.session_state["report"]["artist_songs"]
+        file_paths = [song.path for songs in artist_songs.values() for song in songs]
+        st.session_state["flatten_plan"] = build_flatten_plan(file_paths, destination)
+
+    flatten_plan = st.session_state.get("flatten_plan")
+
+    if flatten_plan is None:
+        return
+
+    st.info(
+        f"{flatten_plan['total_files']} file(s) will be copied to "
+        f"{flatten_plan['destination_folder']}"
+    )
+
+    with st.expander("Show files"):
+        for change in flatten_plan["changes"]:
+            st.caption(f"{Path(change['source']).name} → {Path(change['destination']).name}")
+
+    if st.button("Copy Files", type="primary", key="flatten_copy"):
+        results = apply_flatten(flatten_plan, dry_run=False)
+        copied = sum(1 for r in results if r["status"] == "copied")
+        failed = sum(1 for r in results if r["status"] == "failed")
+
+        message = f"Copied {copied} file(s)."
+        if failed:
+            message += f" {failed} failed."
+
+        st.success(message)
+
+
+def _render_artist_folder_export():
+    st.write(
+        "Copies every song into a folder per artist (Album subfolders are "
+        "flattened away), so anyone browsing the export — like via a "
+        "shared Google Drive folder — can jump straight to an artist "
+        "instead of scrolling through everything at once."
+    )
+
+    destination = _folder_picker_input(
+        "Destination folder",
+        key="artist_folder_destination",
+        default_value="data/output/by_artist",
+        prompt="Select a destination folder",
+    )
+
+    if st.button("Preview Export", key="artist_folder_preview"):
+        artist_songs = st.session_state["report"]["artist_songs"]
+        st.session_state["artist_folder_plan"] = build_artist_folder_plan(artist_songs, destination)
+
+    artist_folder_plan = st.session_state.get("artist_folder_plan")
+
+    if artist_folder_plan is None:
+        return
+
+    st.info(
+        f"{artist_folder_plan['total_files']} file(s) will be copied to "
+        f"{artist_folder_plan['destination_folder']}"
+    )
+
+    with st.expander("Show files"):
+        for change in artist_folder_plan["changes"]:
+            source_name = Path(change["source"]).name
+            destination_path = Path(change["destination"])
+            st.caption(f"{source_name} → {destination_path.parent.name}/{destination_path.name}")
+
+    if st.button("Copy Files", type="primary", key="artist_folder_copy"):
+        results = apply_flatten(artist_folder_plan, dry_run=False)
+        copied = sum(1 for r in results if r["status"] == "copied")
+        failed = sum(1 for r in results if r["status"] == "failed")
+
+        message = f"Copied {copied} file(s)."
+        if failed:
+            message += f" {failed} failed."
+
+        st.success(message)
+
+
+def _render_csv_export():
+    st.write(
+        "Exports artist, album, title, format, and file path for every "
+        "song to a single CSV file — handy for browsing your library in a "
+        "spreadsheet."
+    )
+
+    destination_folder = _folder_picker_input(
+        "Destination folder",
+        key="csv_destination_folder",
+        default_value="data/output",
+        prompt="Select a destination folder",
+    )
+    filename = st.text_input("File name", value="library.csv", key="csv_filename")
+
+    if st.button("Export CSV", type="primary", key="csv_export_button"):
+        artist_songs = st.session_state["report"]["artist_songs"]
+        rows = build_csv_rows(artist_songs)
+        destination_path = Path(destination_folder) / filename
+        write_csv_export(rows, destination_path)
+
+        st.session_state["csv_export_path"] = str(destination_path)
+        st.session_state["csv_export_row_count"] = len(rows)
+
+    csv_export_path = st.session_state.get("csv_export_path")
+
+    if csv_export_path is not None:
+        st.success(
+            f"Wrote {st.session_state['csv_export_row_count']} row(s) to {csv_export_path}"
+        )
+
+
+EXPORT_MODES = {
+    "Flattened files": _render_flatten_export,
+    "Artist folders": _render_artist_folder_export,
+    "CSV file info": _render_csv_export,
+}
+
+
 CLEAN_UP_TOOLS = {
     "Normalize": _render_normalize_tool,
     "Duplicate Artist": _render_duplicate_artist_tool,
@@ -728,30 +886,12 @@ with tab_import:
         "and Clean Up Tools are ready as soon as it finishes."
     )
 
-    if "library_path_input" not in st.session_state:
-        st.session_state["library_path_input"] = DEFAULT_LIBRARY_PATH
-
-    picker_col, button_col = st.columns([4, 1])
-
-    # Filled out of visual order on purpose: the button's session_state
-    # update must happen before the text_input below is instantiated,
-    # since Streamlit forbids writing to a widget's key after that widget
-    # has already been created in the current script run.
-    with button_col:
-        browse_clicked = st.button("Browse...")
-
-    if browse_clicked:
-        chosen_folder = _pick_folder_macos()
-
-        if chosen_folder:
-            st.session_state["library_path_input"] = chosen_folder
-
-    with picker_col:
-        st.text_input(
-            "Library folder",
-            key="library_path_input",
-            label_visibility="collapsed",
-        )
+    _folder_picker_input(
+        "Library folder",
+        key="library_path_input",
+        default_value=DEFAULT_LIBRARY_PATH,
+        prompt="Select your music library folder",
+    )
 
     st.caption(
         "\"Browse...\" opens a native macOS folder picker. If it's "
@@ -947,43 +1087,19 @@ with tab_restore:
 
 with tab_export:
     st.header("Export")
-    st.write(
-        "Copies every song out of its nested Artist/Album folders into one "
-        "flat folder, keeping original filenames. Your library is untouched."
-    )
 
-    export_library_path = st.text_input(
-        "Library path",
-        value=st.session_state.get("library_path", DEFAULT_LIBRARY_PATH),
-        key="export_library_path",
-    )
-    destination = st.text_input(
-        "Destination folder", value="data/output/flattened", key="flatten_destination"
-    )
+    if st.session_state.get("report") is None:
+        st.info("Import a library first on the Import tab.")
 
-    if st.button("Preview Export"):
-        songs = scan_library(export_library_path)
-        st.session_state["flatten_plan"] = build_flatten_plan(songs, destination)
-
-    flatten_plan = st.session_state.get("flatten_plan")
-
-    if flatten_plan is not None:
-        st.info(
-            f"{flatten_plan['total_files']} file(s) will be copied to "
-            f"{flatten_plan['destination_folder']}"
+    else:
+        export_mode = st.segmented_control(
+            "Export as",
+            list(EXPORT_MODES.keys()),
+            default="Flattened files",
+            required=True,
+            key="export_mode",
         )
 
-        with st.expander("Show files"):
-            for change in flatten_plan["changes"]:
-                st.caption(f"{Path(change['source']).name} → {Path(change['destination']).name}")
+        st.divider()
 
-        if st.button("Copy Files", type="primary"):
-            results = apply_flatten(flatten_plan, dry_run=False)
-            copied = sum(1 for r in results if r["status"] == "copied")
-            failed = sum(1 for r in results if r["status"] == "failed")
-
-            message = f"Copied {copied} file(s)."
-            if failed:
-                message += f" {failed} failed."
-
-            st.success(message)
+        EXPORT_MODES[export_mode]()

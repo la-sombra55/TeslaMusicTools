@@ -2,6 +2,55 @@ from pathlib import Path
 import shutil
 
 
+def _sanitize_folder_name(name):
+    for char in ("/", "\\"):
+        name = name.replace(char, "-")
+
+    return name.strip()
+
+
+def build_artist_folder_plan(artist_songs, destination_folder):
+    """
+    Like build_flatten_plan, but groups songs into one folder per artist
+    (flattening away any Album subfolders) instead of one flat destination,
+    so someone browsing the export can jump straight to an artist.
+    """
+    destination_folder = Path(destination_folder)
+
+    changes = []
+
+    for artist, songs in artist_songs.items():
+        artist_folder = destination_folder / _sanitize_folder_name(artist)
+        used_names = set()
+
+        for song in songs:
+            file_path = Path(song.path)
+            stem = file_path.stem
+            extension = file_path.suffix
+
+            candidate = file_path.name
+            attempt = 2
+
+            while candidate in used_names:
+                candidate = f"{stem} ({attempt}){extension}"
+                attempt += 1
+
+            used_names.add(candidate)
+
+            changes.append(
+                {
+                    "source": str(file_path),
+                    "destination": str(artist_folder / candidate),
+                }
+            )
+
+    return {
+        "total_files": len(changes),
+        "destination_folder": str(destination_folder),
+        "changes": changes,
+    }
+
+
 def build_flatten_plan(file_paths, destination_folder):
     destination_folder = Path(destination_folder)
 
