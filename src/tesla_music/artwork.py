@@ -7,6 +7,7 @@ from pathlib import Path
 
 from mutagen.id3 import ID3, ID3NoHeaderError, APIC
 from mutagen.mp4 import MP4, MP4Cover
+from mutagen.wave import WAVE
 
 from tesla_music.backup import create_backup, new_backup_root
 
@@ -33,6 +34,10 @@ def has_artwork(file_path):
     if suffix == ".m4a":
         audio = MP4(file_path)
         return bool(audio.get("covr"))
+
+    if suffix == ".wav":
+        audio = WAVE(file_path)
+        return audio.tags is not None and len(audio.tags.getall("APIC")) > 0
 
     raise ValueError(f"Unsupported file type: {suffix}")
 
@@ -67,6 +72,27 @@ def embed_artwork(file_path, image_bytes, mime_type="image/jpeg"):
 
         cover_format = MP4Cover.FORMAT_PNG if mime_type == "image/png" else MP4Cover.FORMAT_JPEG
         audio["covr"] = [MP4Cover(image_bytes, imageformat=cover_format)]
+        audio.save()
+
+    elif suffix == ".wav":
+        audio = WAVE(file_path)
+
+        if audio.tags is None:
+            audio.add_tags()
+
+        wav_tags = audio.tags
+        assert wav_tags is not None
+
+        wav_tags.delall("APIC")
+        wav_tags.add(
+            APIC(
+                encoding=3,
+                mime=mime_type,
+                type=3,
+                desc="Cover",
+                data=image_bytes,
+            )
+        )
         audio.save()
 
     else:

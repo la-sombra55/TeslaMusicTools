@@ -1,6 +1,8 @@
 from pathlib import Path
 
 from mutagen import File
+from mutagen.id3 import TALB, TIT2, TPE1, TPE2
+from mutagen.wave import WAVE
 
 
 MP3_EASY_KEYS = {
@@ -15,6 +17,16 @@ MP4_ATOMS = {
     "title": "\xa9nam",
     "album": "\xa9alb",
     "album_artist": "aART",
+}
+
+# WAV stores tags as raw ID3 frames (same as MP3 under the hood), but
+# mutagen's easy=True mode doesn't map those to simple keys the way it does
+# for MP3 -- see the matching ID3_FRAME_KEYS note in metadata.py.
+WAV_ID3_FRAMES = {
+    "artist": TPE1,
+    "title": TIT2,
+    "album": TALB,
+    "album_artist": TPE2,
 }
 
 
@@ -40,6 +52,19 @@ def update_tags(file_path, tags):
 
         for field, value in tags.items():
             audio[MP4_ATOMS[field]] = [value]
+
+    elif suffix == ".wav":
+        audio = WAVE(file_path)
+
+        if audio.tags is None:
+            audio.add_tags()
+
+        wav_tags = audio.tags
+        assert wav_tags is not None
+
+        for field, value in tags.items():
+            frame_class = WAV_ID3_FRAMES[field]
+            wav_tags.add(frame_class(encoding=3, text=[value]))
 
     else:
         raise ValueError(

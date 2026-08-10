@@ -17,6 +17,26 @@ class FakeAudio:
         self.saved = True
 
 
+class FakeWavTags:
+    def __init__(self):
+        self.frames = {}
+
+    def add(self, frame):
+        self.frames[type(frame).__name__] = frame
+
+
+class FakeWaveAudio:
+    def __init__(self, tags=None):
+        self.tags = tags
+        self.saved = False
+
+    def add_tags(self):
+        self.tags = FakeWavTags()
+
+    def save(self):
+        self.saved = True
+
+
 def test_update_artist_sets_id3_artist_tag_for_mp3(monkeypatch):
     fake_audio = FakeAudio()
     monkeypatch.setattr(writer, "File", lambda path, easy=False: fake_audio)
@@ -78,3 +98,25 @@ def test_update_tags_sets_artist_and_title_together_for_m4a(monkeypatch):
 
     assert fake_audio.tags["\xa9ART"] == ["Maroon 5"]
     assert fake_audio.tags["\xa9nam"] == ["Girls Like You (feat. Cardi B)"]
+
+
+def test_update_tags_sets_id3_frames_for_wav(monkeypatch):
+    fake_audio = FakeWaveAudio(tags=FakeWavTags())
+    monkeypatch.setattr(writer, "WAVE", lambda path: fake_audio)
+
+    writer.update_tags(Path("song.wav"), {"artist": "Chris Brown", "title": "Deuces"})
+
+    assert fake_audio.tags.frames["TPE1"].text == ["Chris Brown"]
+    assert fake_audio.tags.frames["TIT2"].text == ["Deuces"]
+    assert fake_audio.saved is True
+
+
+def test_update_tags_creates_tags_for_wav_when_missing(monkeypatch):
+    fake_audio = FakeWaveAudio(tags=None)
+    monkeypatch.setattr(writer, "WAVE", lambda path: fake_audio)
+
+    writer.update_tags(Path("song.wav"), {"artist": "Chris Brown"})
+
+    assert fake_audio.tags is not None
+    assert fake_audio.tags.frames["TPE1"].text == ["Chris Brown"]
+    assert fake_audio.saved is True

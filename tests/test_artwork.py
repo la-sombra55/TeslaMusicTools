@@ -31,6 +31,18 @@ class FakeMP4(dict):
         pass
 
 
+class FakeWaveAudio:
+    def __init__(self, tags=None):
+        self.tags = tags
+        self.saved = False
+
+    def add_tags(self):
+        self.tags = FakeID3Tags([])
+
+    def save(self):
+        self.saved = True
+
+
 class FakeResponse:
     def __init__(self, payload_bytes, content_type="application/json"):
         self._payload = payload_bytes
@@ -93,6 +105,26 @@ def test_has_artwork_false_when_m4a_has_no_cover(monkeypatch):
     assert artwork.has_artwork("song.m4a") is False
 
 
+def test_has_artwork_true_when_wav_has_apic_frame(monkeypatch):
+    monkeypatch.setattr(
+        artwork, "WAVE", lambda path: FakeWaveAudio(tags=FakeID3Tags(["fake_apic"]))
+    )
+
+    assert artwork.has_artwork("song.wav") is True
+
+
+def test_has_artwork_false_when_wav_has_no_apic_frame(monkeypatch):
+    monkeypatch.setattr(artwork, "WAVE", lambda path: FakeWaveAudio(tags=FakeID3Tags([])))
+
+    assert artwork.has_artwork("song.wav") is False
+
+
+def test_has_artwork_false_when_wav_has_no_tags_at_all(monkeypatch):
+    monkeypatch.setattr(artwork, "WAVE", lambda path: FakeWaveAudio(tags=None))
+
+    assert artwork.has_artwork("song.wav") is False
+
+
 def test_has_artwork_raises_for_unsupported_extension():
     with pytest.raises(ValueError, match="Unsupported file type"):
         artwork.has_artwork("song.flac")
@@ -133,6 +165,28 @@ def test_embed_artwork_sets_covr_atom_for_m4a(monkeypatch):
     artwork.embed_artwork("song.m4a", b"image bytes", "image/png")
 
     assert len(fake_audio["covr"]) == 1
+
+
+def test_embed_artwork_adds_apic_frame_for_wav(monkeypatch):
+    fake_tags = FakeID3Tags([])
+    fake_audio = FakeWaveAudio(tags=fake_tags)
+    monkeypatch.setattr(artwork, "WAVE", lambda path: fake_audio)
+
+    artwork.embed_artwork("song.wav", b"image bytes", "image/jpeg")
+
+    assert len(fake_tags._apic_frames) == 1
+    assert fake_audio.saved is True
+
+
+def test_embed_artwork_creates_tags_for_wav_when_missing(monkeypatch):
+    fake_audio = FakeWaveAudio(tags=None)
+    monkeypatch.setattr(artwork, "WAVE", lambda path: fake_audio)
+
+    artwork.embed_artwork("song.wav", b"image bytes")
+
+    assert fake_audio.tags is not None
+    assert len(fake_audio.tags._apic_frames) == 1
+    assert fake_audio.saved is True
 
 
 def test_embed_artwork_raises_for_unsupported_extension():
