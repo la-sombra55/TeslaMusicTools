@@ -8,6 +8,7 @@ AUDIO_EXTENSIONS = {
     ".flac",
     ".m4a",
     ".aac",
+    ".wav",
 }
 
 
