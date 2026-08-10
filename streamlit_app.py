@@ -22,8 +22,8 @@ from tesla_music.duplicates import (
     build_duplicate_plan,
     find_duplicate_songs,
 )
-from tesla_music.feat_normalizer import find_featured_artist_changes
 from tesla_music.csv_export import build_csv_rows, write_csv_export
+from tesla_music.feat_normalizer import find_featured_artist_changes
 from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
 from tesla_music.multi_artist import (
     SEPARATOR_AMPERSAND,
@@ -219,19 +219,19 @@ def _print_apply_results(results):
             st.caption(result.get("error", "Unknown error"))
 
 
-def _render_move_results(results):
+def _render_failure_details(results, path_key, verb="processed"):
     """
-    Shows detail for any failed moves. Successful moves aren't itemized
-    here since the calling tool already reports a summary count.
+    Shows detail for any failed results. Successes aren't itemized here
+    since the calling tool already reports a summary count.
     """
     failed_results = [r for r in results if r["status"] == "failed"]
 
     if not failed_results:
         return
 
-    with st.expander(f"{len(failed_results)} file(s) failed to move", expanded=True):
+    with st.expander(f"{len(failed_results)} file(s) failed to be {verb}", expanded=True):
         for result in failed_results:
-            st.write(f"❌ {Path(result['source']).name}")
+            st.write(f"❌ {Path(result[path_key]).name}")
             st.caption(result.get("error", "Unknown error"))
 
 
@@ -450,7 +450,7 @@ def _render_drm_tool():
             message += f" {failed} failed."
 
         st.success(message)
-        _render_move_results(drm_results)
+        _render_failure_details(drm_results, "source", verb="moved")
 
         with st.spinner("Refreshing library data..."):
             _refresh_library_state()
@@ -521,7 +521,7 @@ def _render_duplicate_files_tool():
             message += f" {failed} failed."
 
         st.success(message)
-        _render_move_results(duplicate_results)
+        _render_failure_details(duplicate_results, "source", verb="moved")
 
         with st.spinner("Refreshing library data..."):
             _refresh_library_state()
@@ -579,14 +579,13 @@ def _render_multi_artist_tool():
                     key=f"multi_artist_primary_{i}",
                 )
                 primary_index = group["candidates"].index(primary_name)
-                remaining = [
-                    name for j, name in enumerate(group["candidates"]) if j != primary_index
-                ]
-                st.caption(
-                    f'Preview: Artist → "{primary_name}"; Title gets '
-                    f'"(feat. {", ".join(remaining)})" appended'
-                )
-                multi_artist_changes.extend(build_feature_choice(group, primary_index))
+                feature_changes = build_feature_choice(group, primary_index)
+
+                st.caption(f'Preview: Artist → "{primary_name}"')
+                for change in feature_changes:
+                    st.caption(f'"{change["current_title"]}" → "{change["new_title"]}"')
+
+                multi_artist_changes.extend(feature_changes)
 
             elif action == "Join with &":
                 new_artist = SEPARATOR_AMPERSAND.join(group["candidates"])
@@ -778,6 +777,7 @@ def _render_artwork_tool():
             message += f" {failed} failed."
 
         st.success(message)
+        _render_failure_details(artwork_results, "file", verb="embedded")
 
 
 def _render_flatten_export():
@@ -813,7 +813,16 @@ def _render_flatten_export():
             st.caption(f"{Path(change['source']).name} → {Path(change['destination']).name}")
 
     if st.button("Copy Files", type="primary", key="flatten_copy"):
-        results = apply_flatten(flatten_plan, dry_run=False)
+        copy_progress_bar = st.progress(0, text="Starting export...")
+
+        results = apply_flatten(
+            flatten_plan,
+            dry_run=False,
+            on_progress=_make_progress_callback(copy_progress_bar, "Copying files", "files", time.time()),
+        )
+
+        copy_progress_bar.empty()
+
         copied = sum(1 for r in results if r["status"] == "copied")
         failed = sum(1 for r in results if r["status"] == "failed")
 
@@ -822,6 +831,7 @@ def _render_flatten_export():
             message += f" {failed} failed."
 
         st.success(message)
+        _render_failure_details(results, "source", verb="copied")
 
 
 def _render_artist_folder_export():
@@ -860,7 +870,16 @@ def _render_artist_folder_export():
             st.caption(f"{source_name} → {destination_path.parent.name}/{destination_path.name}")
 
     if st.button("Copy Files", type="primary", key="artist_folder_copy"):
-        results = apply_flatten(artist_folder_plan, dry_run=False)
+        copy_progress_bar = st.progress(0, text="Starting export...")
+
+        results = apply_flatten(
+            artist_folder_plan,
+            dry_run=False,
+            on_progress=_make_progress_callback(copy_progress_bar, "Copying files", "files", time.time()),
+        )
+
+        copy_progress_bar.empty()
+
         copied = sum(1 for r in results if r["status"] == "copied")
         failed = sum(1 for r in results if r["status"] == "failed")
 
@@ -869,6 +888,7 @@ def _render_artist_folder_export():
             message += f" {failed} failed."
 
         st.success(message)
+        _render_failure_details(results, "source", verb="copied")
 
 
 def _render_csv_export():
@@ -887,10 +907,17 @@ def _render_csv_export():
     filename = st.text_input("File name", value="library.csv", key="csv_filename")
 
     if st.button("Export CSV", type="primary", key="csv_export_button"):
+        csv_progress_bar = st.progress(0, text="Starting export...")
+
         artist_songs = st.session_state["report"]["artist_songs"]
-        rows = build_csv_rows(artist_songs)
+        rows = build_csv_rows(
+            artist_songs,
+            on_progress=_make_progress_callback(csv_progress_bar, "Gathering song info", "songs", time.time()),
+        )
         destination_path = Path(destination_folder) / filename
         write_csv_export(rows, destination_path)
+
+        csv_progress_bar.empty()
 
         st.session_state["csv_export_path"] = str(destination_path)
         st.session_state["csv_export_row_count"] = len(rows)

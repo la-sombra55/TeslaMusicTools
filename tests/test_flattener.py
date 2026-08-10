@@ -128,6 +128,30 @@ def test_apply_flatten_copies_file_and_preserves_source(tmp_path):
     assert source.read_bytes() == b"audio bytes"
 
 
+def test_apply_flatten_reports_progress(tmp_path):
+    source_a = tmp_path / "a.mp3"
+    source_b = tmp_path / "b.mp3"
+    source_a.write_bytes(b"a")
+    source_b.write_bytes(b"b")
+
+    plan = {
+        "total_files": 2,
+        "destination_folder": str(tmp_path / "flat"),
+        "changes": [
+            {"source": str(source_a), "destination": str(tmp_path / "flat" / "a.mp3")},
+            {"source": str(source_b), "destination": str(tmp_path / "flat" / "b.mp3")},
+        ],
+    }
+
+    progress_calls = []
+
+    apply_flatten(
+        plan, dry_run=False, on_progress=lambda done, total: progress_calls.append((done, total))
+    )
+
+    assert progress_calls == [(1, 2), (2, 2)]
+
+
 def test_apply_flatten_records_failure_for_missing_source(tmp_path):
     plan = {
         "total_files": 1,

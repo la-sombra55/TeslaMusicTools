@@ -53,6 +53,18 @@ def test_build_csv_rows_handles_no_songs():
     assert build_csv_rows({}) == []
 
 
+def test_build_csv_rows_reports_progress(make_song):
+    artist_songs = {
+        "Chris Brown": [make_song("a.mp3", artist="Chris Brown"), make_song("b.mp3", artist="Chris Brown")],
+    }
+
+    progress_calls = []
+
+    build_csv_rows(artist_songs, on_progress=lambda done, total: progress_calls.append((done, total)))
+
+    assert progress_calls == [(1, 2), (2, 2)]
+
+
 def test_write_csv_export_writes_a_real_readable_csv(tmp_path):
     rows = [
         {

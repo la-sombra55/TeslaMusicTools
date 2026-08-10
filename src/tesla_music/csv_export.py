@@ -4,8 +4,10 @@ from pathlib import Path
 CSV_FIELDNAMES = ["artist", "album_artist", "album", "title", "format", "file_path"]
 
 
-def build_csv_rows(artist_songs):
+def build_csv_rows(artist_songs, on_progress=None):
     rows = []
+    total = sum(len(songs) for songs in artist_songs.values())
+    completed = 0
 
     for songs in artist_songs.values():
         for song in songs:
@@ -19,6 +21,11 @@ def build_csv_rows(artist_songs):
                     "file_path": str(song.path),
                 }
             )
+
+            completed += 1
+
+            if on_progress is not None:
+                on_progress(completed, total)
 
     return rows
 

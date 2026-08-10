@@ -85,10 +85,11 @@ def build_flatten_plan(file_paths, destination_folder):
     }
 
 
-def apply_flatten(plan, dry_run=True):
+def apply_flatten(plan, dry_run=True, on_progress=None):
     results = []
+    total = len(plan["changes"])
 
-    for change in plan["changes"]:
+    for index, change in enumerate(plan["changes"]):
         result = {
             "source": change["source"],
             "destination": change["destination"],
@@ -112,6 +113,9 @@ def apply_flatten(plan, dry_run=True):
                 result["error"] = str(error)
 
         results.append(result)
+
+        if on_progress is not None:
+            on_progress(index + 1, total)
 
     return results
 
