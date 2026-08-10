@@ -48,6 +48,15 @@ def test_scan_library_default_extensions_exclude_m4p(tmp_path):
     assert {song.name for song in songs} == {"top.mp3"}
 
 
+def test_scan_library_excludes_appledouble_sidecar_files(tmp_path):
+    (tmp_path / "song.mp3").write_bytes(b"")
+    (tmp_path / "._song.mp3").write_bytes(b"")
+
+    songs = scanner.scan_library(tmp_path)
+
+    assert {song.name for song in songs} == {"song.mp3"}
+
+
 def test_scan_library_accepts_custom_extensions(tmp_path):
     (tmp_path / "top.mp3").write_bytes(b"")
     (tmp_path / "drm.m4p").write_bytes(b"")

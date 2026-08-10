@@ -18,6 +18,14 @@ def scan_library(folder=None, extensions=None):
     songs = []
 
     for file in folder.rglob("*"):
+        # Skip AppleDouble sidecar files (e.g. "._song.mp3"): macOS writes
+        # one alongside every real file when copying to a filesystem that
+        # doesn't support its metadata, like the exFAT/FAT32 USB drives
+        # Tesla requires. They share the real file's extension, so without
+        # this check every song gets counted twice.
+        if file.name.startswith("._"):
+            continue
+
         if file.is_file() and file.suffix.lower() in extensions:
             songs.append(file)
 
