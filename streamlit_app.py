@@ -1,4 +1,5 @@
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -57,6 +58,91 @@ def _make_progress_callback(progress_bar, label, unit, start_time):
         )
 
     return on_progress
+
+
+class _ArtworkSearchState:
+    def __init__(self):
+        self.start_time = time.time()
+        self.completed = 0
+        self.total = 0
+        self.done = False
+        self.result = None
+        self.error = None
+
+
+def _start_artwork_search(artist_songs):
+    """
+    Runs the (slow, rate-limited) artwork search on a background thread so
+    the rest of the app stays fully usable while it works. The thread only
+    touches a plain state object -- session_state is written back to from
+    proper Streamlit execution contexts (see _finish_artwork_search_if_done).
+    """
+    state = _ArtworkSearchState()
+
+    def worker():
+        try:
+            def on_progress(completed, total):
+                state.completed = completed
+                state.total = total
+
+            state.result = build_artwork_plan(artist_songs, on_progress=on_progress)
+
+        except Exception as error:
+            state.error = str(error)
+
+        finally:
+            state.done = True
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    st.session_state["artwork_search_state"] = state
+
+
+def _finish_artwork_search_if_done():
+    """
+    Checks the background artwork search, if any. If it just finished,
+    moves its result into artwork_plan and clears the running state.
+    Returns the state object if a search is still running, otherwise None.
+    """
+    state = st.session_state.get("artwork_search_state")
+
+    if state is None or not state.done:
+        return state
+
+    if state.error:
+        st.error(f"Artwork search failed: {state.error}")
+    else:
+        st.session_state["artwork_plan"] = state.result
+
+    st.session_state["artwork_search_state"] = None
+
+    return None
+
+
+@st.fragment(run_every="2s")
+def _render_artwork_progress_fragment():
+    running_state = _finish_artwork_search_if_done()
+
+    if running_state is None:
+        st.rerun()
+        return
+
+    elapsed = time.time() - running_state.start_time
+    rate = elapsed / running_state.completed if running_state.completed else 0
+    eta_seconds = round(rate * (running_state.total - running_state.completed))
+    fraction = running_state.completed / running_state.total if running_state.total else 0.0
+    eta_text = (
+        f"~{eta_seconds}s remaining" if running_state.completed > 0
+        else "estimating time remaining..."
+    )
+
+    st.progress(
+        fraction,
+        text=(
+            f"Searching artwork... {running_state.completed}/{running_state.total} "
+            f"albums/singles ({eta_text})"
+        ),
+    )
 
 
 def _pick_folder_macos():
@@ -472,22 +558,17 @@ def _render_artwork_tool():
         "get a second opinion from Deezer so you can compare and pick."
     )
     st.caption(
-        "Not run automatically at import — this needs live network lookups "
-        "and can take a while on a large library (roughly 1 second per "
-        "unique album/single)."
+        "Runs in the background — feel free to switch to another tool "
+        "while this finishes. Roughly 1 second per unique album/single, "
+        "so it can take a while on a large library."
     )
 
-    if st.button("Search for Missing Artwork", type="primary"):
-        progress_bar = st.progress(0, text="Starting artwork search...")
+    if st.session_state.get("artwork_search_state") is not None:
+        _render_artwork_progress_fragment()
 
-        st.session_state["artwork_plan"] = build_artwork_plan(
-            st.session_state["report"]["artist_songs"],
-            on_progress=_make_progress_callback(
-                progress_bar, "Searching artwork", "albums/singles", time.time()
-            ),
-        )
-
-        progress_bar.empty()
+    elif st.button("Search for Missing Artwork", type="primary", key="start_artwork_tool"):
+        _start_artwork_search(st.session_state["report"]["artist_songs"])
+        st.rerun()
 
     artwork_plan = st.session_state.get("artwork_plan")
 
@@ -709,14 +790,24 @@ with tab_review:
     else:
         st.subheader("Summary")
 
+        format_counts = list(report["formats"].most_common())
+        drm_count = st.session_state.get("drm_plan", {"total_files": 0})["total_files"]
+
+        if drm_count:
+            format_counts.append(("m4p", drm_count))
+            format_counts.sort(key=lambda item: item[1], reverse=True)
+
         col1, col2, col3 = st.columns(3)
         col1.metric("Songs scanned", report["songs_scanned"])
         col2.metric("Unique artists", len(report["artists"]))
-        col3.metric("File formats", len(report["formats"]))
+        col3.metric("File formats", len(format_counts))
 
         with st.expander("File formats"):
-            for extension, count in report["formats"].most_common():
-                st.write(f"**{extension.upper()}**: {count} songs")
+            for extension, count in format_counts:
+                note = (
+                    " — DRM-protected, can't play in a Tesla" if extension == "m4p" else ""
+                )
+                st.write(f"**{extension.upper()}**: {count} songs{note}")
 
         st.subheader("What the tool found")
 
@@ -754,10 +845,48 @@ with tab_review:
                 "Head to the Clean Up Tools tab to review and act on any of these."
             )
 
-        st.caption(
-            "Album art isn't checked automatically (it needs live network "
-            "lookups) — run it from Clean Up Tools → Artwork when you're ready."
-        )
+        st.subheader("Album artwork")
+
+        artwork_running_state = _finish_artwork_search_if_done()
+
+        if artwork_running_state is not None:
+            percent = (
+                round(artwork_running_state.completed / artwork_running_state.total * 100)
+                if artwork_running_state.total
+                else 0
+            )
+            st.info(
+                f"🎨 Artwork check running in the background — "
+                f"{artwork_running_state.completed}/{artwork_running_state.total} "
+                f"({percent}%). Feel free to use Clean Up Tools while this "
+                "finishes — there's a live progress bar in "
+                "Clean Up Tools → Artwork."
+            )
+
+        elif st.session_state.get("artwork_plan") is not None:
+            artwork_plan_summary = st.session_state["artwork_plan"]
+            st.success(
+                f"✅ Artwork check complete — found artwork for "
+                f"{artwork_plan_summary['total_files']} song(s). Review "
+                "matches in Clean Up Tools → Artwork."
+            )
+
+        else:
+            st.write(
+                "Not checked yet. This needs live network lookups and can "
+                "take a while on a large library, so it isn't run "
+                "automatically at import."
+            )
+
+            if st.button("Start Album Artwork Check"):
+                _start_artwork_search(report["artist_songs"])
+                st.rerun()
+
+            st.caption(
+                "Runs in the background, so you can keep using Clean Up "
+                "Tools while it finishes — there's a live progress bar in "
+                "Clean Up Tools → Artwork."
+            )
 
 with tab_cleanup_tools:
     st.header("Clean Up Tools")
