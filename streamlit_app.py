@@ -215,6 +215,39 @@ def _print_apply_results(results):
         icon = "✅" if result["status"] == "updated" else "❌"
         st.write(f"{icon} {Path(result['file']).name} — {result['status']}")
 
+        if result["status"] == "failed":
+            st.caption(result.get("error", "Unknown error"))
+
+
+def _render_move_results(results):
+    """
+    Shows detail for any failed moves. Successful moves aren't itemized
+    here since the calling tool already reports a summary count.
+    """
+    failed_results = [r for r in results if r["status"] == "failed"]
+
+    if not failed_results:
+        return
+
+    with st.expander(f"{len(failed_results)} file(s) failed to move", expanded=True):
+        for result in failed_results:
+            st.write(f"❌ {Path(result['source']).name}")
+            st.caption(result.get("error", "Unknown error"))
+
+
+def _refresh_library_state():
+    """
+    Re-scans the library and rebuilds every tool's candidate list from the
+    current disk state. Needed after any operation that physically moves
+    files (Duplicate Files, DRM Files) so other tools' already-computed
+    plans don't reference paths that no longer exist there.
+    """
+    for key in list(st.session_state.keys()):
+        if key.startswith("multi_artist_action_") or key.startswith("multi_artist_primary_"):
+            del st.session_state[key]
+
+    _run_import(st.session_state["library_path"])
+
 
 def _run_import(library_path):
     report = analyzer.run(library_path)
@@ -417,6 +450,15 @@ def _render_drm_tool():
             message += f" {failed} failed."
 
         st.success(message)
+        _render_move_results(drm_results)
+
+        with st.spinner("Refreshing library data..."):
+            _refresh_library_state()
+
+        st.caption(
+            "Every other tool's data has been refreshed to match — moved "
+            "files won't show up as stale entries elsewhere."
+        )
 
 
 def _render_duplicate_files_tool():
@@ -479,6 +521,15 @@ def _render_duplicate_files_tool():
             message += f" {failed} failed."
 
         st.success(message)
+        _render_move_results(duplicate_results)
+
+        with st.spinner("Refreshing library data..."):
+            _refresh_library_state()
+
+        st.caption(
+            "Every other tool's data has been refreshed to match — moved "
+            "files won't show up as stale entries elsewhere."
+        )
 
 
 def _render_multi_artist_tool():
