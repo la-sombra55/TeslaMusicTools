@@ -255,7 +255,14 @@ def _refresh_library_state():
 
 
 def _run_import(library_path):
-    report = analyzer.run(library_path)
+    scan_progress_bar = st.progress(0, text="Starting import...")
+
+    report = analyzer.run(
+        library_path,
+        on_progress=_make_progress_callback(
+            scan_progress_bar, "Reading library", "songs", time.time()
+        ),
+    )
 
     recommendations = build_recommendations(report["artist_groups"], report["artist_songs"])
     feat_changes = find_featured_artist_changes(report["artist_songs"])
@@ -265,12 +272,19 @@ def _run_import(library_path):
     multi_artist_candidates = find_multi_artist_credits(report["artist_songs"])
 
     duplicate_scan_songs = scan_library(library_path, extensions=DUPLICATE_SCAN_EXTENSIONS)
-    _, duplicate_artist_songs = analyzer.analyze_artists(duplicate_scan_songs)
+    _, duplicate_artist_songs = analyzer.analyze_artists(
+        duplicate_scan_songs,
+        on_progress=_make_progress_callback(
+            scan_progress_bar, "Checking for duplicates", "songs", time.time()
+        ),
+    )
     duplicate_groups = find_duplicate_songs(duplicate_artist_songs)
     duplicate_plan = build_duplicate_plan(duplicate_groups)
 
     drm_songs = find_drm_songs(library_path)
     drm_plan = build_drm_plan(drm_songs)
+
+    scan_progress_bar.empty()
 
     st.session_state["library_path"] = library_path
     st.session_state["report"] = report
@@ -988,8 +1002,7 @@ with tab_import:
             st.error(f"Folder not found: {library_path}")
 
         else:
-            with st.spinner("Importing and analyzing your library..."):
-                _run_import(library_path)
+            _run_import(library_path)
 
             st.success(
                 "Import complete! Head to the Review tab for a summary, or "
