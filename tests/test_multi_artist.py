@@ -28,6 +28,15 @@ def test_split_multi_artist_handles_plain_and_between_two_names():
     assert split_multi_artist("Simon and Garfunkel") == ["Simon", "Garfunkel"]
 
 
+def test_split_multi_artist_handles_plain_with_between_two_names():
+    assert split_multi_artist("P. Diddy With Pharrell") == ["P. Diddy", "Pharrell"]
+
+
+def test_split_multi_artist_handles_with_and_ampersand_list():
+    result = split_multi_artist("P. Diddy With Pharrell, Loon & Lenny Kravitz")
+    assert result == ["P. Diddy", "Pharrell", "Loon", "Lenny Kravitz"]
+
+
 def test_split_multi_artist_handles_slash():
     result = split_multi_artist("Fabolous/P. Diddy/Jagged Edge")
     assert result == ["Fabolous", "P. Diddy", "Jagged Edge"]
@@ -35,6 +44,19 @@ def test_split_multi_artist_handles_slash():
 
 def test_split_multi_artist_handles_vs():
     assert split_multi_artist("Freddie vs. Jason") == ["Freddie", "Jason"]
+
+
+def test_split_multi_artist_ignores_commas_inside_parentheses():
+    # A parenthetical note (e.g. crediting who does an intro) isn't a
+    # second artist -- splitting on the comma inside it produced mismatched
+    # parens in the output. There's no safe general way to untangle real
+    # names from descriptive words like "Intro" in there, so this should
+    # back off entirely rather than guess.
+    assert split_multi_artist("T-Pain (Akon Intro, R.Kelly)") is None
+
+
+def test_split_multi_artist_ignores_ampersand_inside_parentheses():
+    assert split_multi_artist("Diddy (Pharrell & Loon Intro)") is None
 
 
 def test_split_multi_artist_returns_none_for_a_single_artist():
