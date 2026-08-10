@@ -43,15 +43,20 @@ DEFAULT_LIBRARY_PATH = "data/input"
 # --- Shared helpers ---
 
 
+def _format_eta(seconds):
+    minutes, seconds = divmod(max(0, round(seconds)), 60)
+    return f"{minutes}:{seconds:02d}"
+
+
 def _make_progress_callback(progress_bar, label, unit, start_time):
     def on_progress(completed, total):
         elapsed = time.time() - start_time
         rate = elapsed / completed if completed else 0
-        eta_seconds = round(rate * (total - completed))
+        eta_seconds = rate * (total - completed)
         fraction = completed / total if total else 1.0
 
         eta_text = (
-            f"~{eta_seconds}s remaining" if completed > 0 else "estimating time remaining..."
+            f"~{_format_eta(eta_seconds)} remaining" if completed > 0 else "estimating time remaining..."
         )
         progress_bar.progress(
             fraction,
@@ -130,10 +135,10 @@ def _render_artwork_progress_fragment():
 
     elapsed = time.time() - running_state.start_time
     rate = elapsed / running_state.completed if running_state.completed else 0
-    eta_seconds = round(rate * (running_state.total - running_state.completed))
+    eta_seconds = rate * (running_state.total - running_state.completed)
     fraction = running_state.completed / running_state.total if running_state.total else 0.0
     eta_text = (
-        f"~{eta_seconds}s remaining" if running_state.completed > 0
+        f"~{_format_eta(eta_seconds)} remaining" if running_state.completed > 0
         else "estimating time remaining..."
     )
 
