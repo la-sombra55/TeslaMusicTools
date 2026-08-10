@@ -4,6 +4,31 @@ from mutagen import File
 
 from tesla_music.models import Song
 
+# WAV files are tagged with raw ID3 frames under the hood, and unlike MP3,
+# mutagen's easy=True mode doesn't map them to simple keys like "artist" --
+# so those keys come back empty and every WAV field falls back to "Unknown"
+# unless we also check the raw frame IDs.
+ID3_FRAME_KEYS = {
+    "artist": "TPE1",
+    "albumartist": "TPE2",
+    "album": "TALB",
+    "title": "TIT2",
+}
+
+
+def _read_tag(audio, easy_key, default):
+    value = audio.get(easy_key, None)
+
+    if value:
+        return value[0]
+
+    frame = audio.get(ID3_FRAME_KEYS[easy_key], None)
+
+    if frame is not None:
+        return str(frame.text[0])
+
+    return default
+
 
 def read_metadata(song_path: Path):
     song = Song(path=song_path)
@@ -17,9 +42,9 @@ def read_metadata(song_path: Path):
     if audio is None:
         return song
 
-    song.artist = audio.get("artist", ["Unknown"])[0]
-    song.album_artist = audio.get("albumartist", ["Unknown"])[0]
-    song.album = audio.get("album", ["Unknown"])[0]
-    song.title = audio.get("title", ["Unknown"])[0]
+    song.artist = _read_tag(audio, "artist", "Unknown")
+    song.album_artist = _read_tag(audio, "albumartist", "Unknown")
+    song.album = _read_tag(audio, "album", "Unknown")
+    song.title = _read_tag(audio, "title", "Unknown")
 
     return song
