@@ -722,6 +722,49 @@ def test_apply_artwork_downloads_and_embeds_on_success(monkeypatch):
     }
 
 
+def test_apply_artwork_records_backup_library_path_when_given(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(
+        artwork, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
+    monkeypatch.setattr(artwork, "_download_image", lambda url: (b"bytes", "image/jpeg"))
+    monkeypatch.setattr(artwork, "embed_artwork", lambda *a, **k: True)
+    monkeypatch.setattr(
+        artwork,
+        "record_backup_library_path",
+        lambda backup_root, library_path: recorded.append((backup_root, library_path)),
+    )
+
+    plan = {
+        "total_files": 1,
+        "changes": [{"file": "a.mp3", "artwork_url": "https://example.com/x.jpg"}],
+    }
+
+    artwork.apply_artwork(plan, dry_run=False, library_path="data/input")
+
+    assert len(recorded) == 1
+    assert recorded[0][1] == "data/input"
+
+
+def test_apply_artwork_does_not_record_backup_library_path_when_not_given(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("must not record a library path when none is given")
+
+    monkeypatch.setattr(
+        artwork, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
+    monkeypatch.setattr(artwork, "_download_image", lambda url: (b"bytes", "image/jpeg"))
+    monkeypatch.setattr(artwork, "embed_artwork", lambda *a, **k: True)
+    monkeypatch.setattr(artwork, "record_backup_library_path", fail_if_called)
+
+    plan = {
+        "total_files": 1,
+        "changes": [{"file": "a.mp3", "artwork_url": "https://example.com/x.jpg"}],
+    }
+
+    artwork.apply_artwork(plan, dry_run=False)
+
+
 def test_apply_artwork_records_failure_when_download_fails(monkeypatch):
     monkeypatch.setattr(
         artwork, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")

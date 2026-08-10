@@ -1,5 +1,6 @@
 import pytest
 
+from tesla_music.backup import record_backup_library_path
 from tesla_music.restore import apply_restore, build_restore_plan
 
 
@@ -14,6 +15,21 @@ def test_build_restore_plan_maps_backup_files_to_original_relative_paths(tmp_pat
     plan = build_restore_plan("20260806_120000")
 
     assert plan["backup_session"] == "20260806_120000"
+    assert plan["total_files"] == 1
+    assert plan["changes"][0]["original"] == "data/input/Chris Brown/Fortune/12 Party Hard.mp3"
+
+
+def test_build_restore_plan_excludes_the_library_path_marker(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    session_root = tmp_path / "data/backups/20260806_120000"
+    original_dir = session_root / "data/input/Chris Brown/Fortune"
+    original_dir.mkdir(parents=True)
+    (original_dir / "12 Party Hard.mp3").write_bytes(b"backed up bytes")
+    record_backup_library_path(session_root, tmp_path / "data/input")
+
+    plan = build_restore_plan("20260806_120000")
+
     assert plan["total_files"] == 1
     assert plan["changes"][0]["original"] == "data/input/Chris Brown/Fortune/12 Party Hard.mp3"
 

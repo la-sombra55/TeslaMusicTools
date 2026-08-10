@@ -39,6 +39,58 @@ def test_successful_apply_backs_up_then_updates_and_records_backup_path(monkeypa
     assert results[0]["backup"] == "data/backups/x/a.mp3"
 
 
+def test_apply_records_backup_library_path_when_given(monkeypatch):
+    recorded = []
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
+    monkeypatch.setattr(apply, "update_tags", lambda file_path, tags: True)
+    monkeypatch.setattr(
+        apply, "record_backup_library_path", lambda backup_root, library_path: recorded.append(
+            (backup_root, library_path)
+        )
+    )
+
+    plan = _plan(
+        [{"file": "a.mp3", "current_artist": "chris brown", "new_artist": "Chris Brown"}]
+    )
+
+    apply.apply_changes(plan, dry_run=False, library_path="data/input")
+
+    assert len(recorded) == 1
+    assert recorded[0][1] == "data/input"
+
+
+def test_apply_does_not_record_backup_library_path_when_not_given(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("must not record a library path when none is given")
+
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
+    monkeypatch.setattr(apply, "update_tags", lambda file_path, tags: True)
+    monkeypatch.setattr(apply, "record_backup_library_path", fail_if_called)
+
+    plan = _plan(
+        [{"file": "a.mp3", "current_artist": "chris brown", "new_artist": "Chris Brown"}]
+    )
+
+    apply.apply_changes(plan, dry_run=False)
+
+
+def test_apply_does_not_record_backup_library_path_during_dry_run(monkeypatch):
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("must not record a library path during a dry run")
+
+    monkeypatch.setattr(apply, "record_backup_library_path", fail_if_called)
+
+    plan = _plan(
+        [{"file": "a.mp3", "current_artist": "chris brown", "new_artist": "Chris Brown"}]
+    )
+
+    apply.apply_changes(plan, dry_run=True, library_path="data/input")
+
+
 def test_successful_apply_only_passes_fields_that_changed(monkeypatch):
     monkeypatch.setattr(
         apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")

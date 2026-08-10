@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tesla_music.backup import create_backup, new_backup_root
+from tesla_music.backup import create_backup, new_backup_root, record_backup_library_path
 from tesla_music.writer import update_tags
 
 
@@ -19,9 +19,12 @@ def _tag_updates(change):
     return tags
 
 
-def apply_changes(plan, dry_run=True):
+def apply_changes(plan, dry_run=True, library_path=None):
     results = []
     backup_root = None if dry_run else new_backup_root()
+
+    if backup_root is not None and library_path is not None:
+        record_backup_library_path(backup_root, library_path)
 
     for change in plan["changes"]:
         file_path = change["file"]

@@ -1,6 +1,8 @@
 from pathlib import Path
 import shutil
 
+from tesla_music.backup import LIBRARY_PATH_MARKER
+
 
 def build_restore_plan(backup_session):
     backup_root = Path("data/backups") / backup_session
@@ -11,7 +13,7 @@ def build_restore_plan(backup_session):
     changes = []
 
     for backup_file in sorted(backup_root.rglob("*")):
-        if backup_file.is_file():
+        if backup_file.is_file() and backup_file.name != LIBRARY_PATH_MARKER:
             original_path = backup_file.relative_to(backup_root)
 
             changes.append(

@@ -9,7 +9,7 @@ from mutagen.id3 import ID3, ID3NoHeaderError, APIC
 from mutagen.mp4 import MP4, MP4Cover
 from mutagen.wave import WAVE
 
-from tesla_music.backup import create_backup, new_backup_root
+from tesla_music.backup import create_backup, new_backup_root, record_backup_library_path
 
 ITUNES_SEARCH_URL = "https://itunes.apple.com/search"
 DEEZER_ALBUM_SEARCH_URL = "https://api.deezer.com/search/album"
@@ -337,10 +337,13 @@ def _download_image(url):
         return response.read(), response.headers.get_content_type()
 
 
-def apply_artwork(plan, dry_run=True, on_progress=None):
+def apply_artwork(plan, dry_run=True, on_progress=None, library_path=None):
     results = []
     backup_root = None if dry_run else new_backup_root()
     total = len(plan["changes"])
+
+    if backup_root is not None and library_path is not None:
+        record_backup_library_path(backup_root, library_path)
 
     for index, change in enumerate(plan["changes"]):
         result = {

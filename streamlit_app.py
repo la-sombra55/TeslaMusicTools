@@ -1,6 +1,7 @@
 import subprocess
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -14,7 +15,7 @@ from tesla_music.artwork import (
     flatten_group,
     search_artwork_alternate,
 )
-from tesla_music.backup import list_backup_sessions
+from tesla_music.backup import count_backup_files, get_backup_library_path, list_backup_sessions
 from tesla_music.drm_files import apply_drm_moves, build_drm_plan, find_drm_songs
 from tesla_music.duplicates import (
     DUPLICATE_SCAN_EXTENSIONS,
@@ -46,6 +47,32 @@ DEFAULT_LIBRARY_PATH = "data/input"
 def _format_eta(seconds):
     minutes, seconds = divmod(max(0, round(seconds)), 60)
     return f"{minutes}:{seconds:02d}"
+
+
+def _format_backup_session_label(session, current_library_path, earliest_session_for_current_library):
+    try:
+        timestamp = datetime.strptime(session, "%Y%m%d_%H%M%S")
+        hour_12 = timestamp.hour % 12 or 12
+        period = "AM" if timestamp.hour < 12 else "PM"
+        when = f"{timestamp:%B} {timestamp.day}, {timestamp.year} at {hour_12}:{timestamp:%M:%S} {period}"
+    except ValueError:
+        when = session
+
+    file_count = count_backup_files(session)
+    plural = "s" if file_count != 1 else ""
+    label = f"{when} — {file_count} file{plural}"
+
+    backup_library_path = get_backup_library_path(session)
+
+    if backup_library_path is None:
+        label += " (library unknown — made before this was tracked)"
+    elif backup_library_path != current_library_path:
+        label += f" (library: {Path(backup_library_path).name})"
+
+    if session == earliest_session_for_current_library:
+        label += " ⭐ (original backup for this library)"
+
+    return label
 
 
 def _make_progress_callback(progress_bar, label, unit, start_time):
@@ -366,7 +393,9 @@ def _render_normalize_tool():
     if st.button(
         "Apply Normalize Changes", type="primary", disabled=not confirm, key="apply_normalize"
     ):
-        st.session_state["normalize_apply_results"] = apply_changes(plan, dry_run=False)
+        st.session_state["normalize_apply_results"] = apply_changes(
+            plan, dry_run=False, library_path=st.session_state["library_path"]
+        )
         st.rerun()
 
     results = st.session_state.get("normalize_apply_results")
@@ -408,7 +437,9 @@ def _render_duplicate_artist_tool():
         disabled=not confirm,
         key="apply_duplicate_artist",
     ):
-        st.session_state["duplicate_artist_apply_results"] = apply_changes(plan, dry_run=False)
+        st.session_state["duplicate_artist_apply_results"] = apply_changes(
+            plan, dry_run=False, library_path=st.session_state["library_path"]
+        )
         st.rerun()
 
     results = st.session_state.get("duplicate_artist_apply_results")
@@ -636,7 +667,7 @@ def _render_multi_artist_tool():
         }
 
         st.session_state["multi_artist_apply_results"] = apply_changes(
-            multi_artist_plan, dry_run=False
+            multi_artist_plan, dry_run=False, library_path=st.session_state["library_path"]
         )
         st.rerun()
 
@@ -784,6 +815,7 @@ def _render_artwork_tool():
             on_progress=_make_progress_callback(
                 embed_progress_bar, "Embedding artwork", "songs", time.time()
             ),
+            library_path=st.session_state["library_path"],
         )
 
         embed_progress_bar.empty()
@@ -1149,7 +1181,24 @@ with tab_restore:
         )
 
     else:
-        session = st.selectbox("Backup session", sessions)
+        current_library_path = None
+        if st.session_state.get("library_path"):
+            current_library_path = str(Path(st.session_state["library_path"]).resolve())
+
+        matching_sessions = (
+            [s for s in sessions if get_backup_library_path(s) == current_library_path]
+            if current_library_path is not None
+            else []
+        )
+        earliest_session_for_current_library = min(matching_sessions) if matching_sessions else None
+
+        session = st.selectbox(
+            "Backup session",
+            sessions,
+            format_func=lambda s: _format_backup_session_label(
+                s, current_library_path, earliest_session_for_current_library
+            ),
+        )
 
         if st.button("Preview Restore"):
             st.session_state["restore_plan"] = build_restore_plan(session)
@@ -1159,7 +1208,7 @@ with tab_restore:
         if restore_plan is not None:
             st.info(
                 f"{restore_plan['total_files']} file(s) will be restored from "
-                f"{restore_plan['backup_session']}"
+                f"{_format_backup_session_label(restore_plan['backup_session'], current_library_path, earliest_session_for_current_library)}"
             )
 
             with st.expander("Show files"):

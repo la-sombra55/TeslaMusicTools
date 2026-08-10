@@ -217,6 +217,7 @@ def run_add_artwork(args):
         flat_plan,
         dry_run=not args.apply,
         on_progress=_print_progress("Embedding artwork", "songs", time.time()),
+        library_path=args.library or "data/input",
     )
 
     print_artwork_report(results)
@@ -484,6 +485,7 @@ def main():
         apply_results = apply_changes(
             plan,
             dry_run=not args.apply,
+            library_path=args.library or "data/input",
     )
 
         print_apply_report(
