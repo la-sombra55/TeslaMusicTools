@@ -866,9 +866,9 @@ with tab_review:
         elif st.session_state.get("artwork_plan") is not None:
             artwork_plan_summary = st.session_state["artwork_plan"]
             st.success(
-                f"✅ Artwork check complete — found artwork for "
-                f"{artwork_plan_summary['total_files']} song(s). Review "
-                "matches in Clean Up Tools → Artwork."
+                f"✅ Artwork check complete — "
+                f"{artwork_plan_summary['total_files']} song(s) without artwork. "
+                "Review potential artwork matches in Clean Up Tools → Artwork."
             )
 
         else:
