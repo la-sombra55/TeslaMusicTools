@@ -43,6 +43,7 @@ def build_drm_plan(songs, destination_folder="data/output/drm_review"):
 
     return {
         "total_files": len(changes),
+        "destination_folder": str(destination_folder),
         "changes": changes,
     }
 

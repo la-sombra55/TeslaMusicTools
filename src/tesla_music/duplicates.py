@@ -119,6 +119,7 @@ def build_duplicate_plan(duplicate_groups, destination_folder="data/output/dupli
 
     return {
         "total_files": len(changes),
+        "destination_folder": str(destination_folder),
         "changes": changes,
     }
 

@@ -152,7 +152,11 @@ def test_build_duplicate_plan_prefers_non_drm_file_over_m4p(make_song):
 
 
 def test_build_duplicate_plan_handles_no_groups():
-    assert build_duplicate_plan([]) == {"total_files": 0, "changes": []}
+    assert build_duplicate_plan([]) == {
+        "total_files": 0,
+        "destination_folder": "data/output/duplicates_review",
+        "changes": [],
+    }
 
 
 # --- apply_duplicate_moves ---

@@ -65,7 +65,11 @@ def test_build_drm_plan_mirrors_original_path(make_song):
 
 
 def test_build_drm_plan_handles_no_songs():
-    assert build_drm_plan([]) == {"total_files": 0, "changes": []}
+    assert build_drm_plan([]) == {
+        "total_files": 0,
+        "destination_folder": "data/output/drm_review",
+        "changes": [],
+    }
 
 
 # --- apply_drm_moves ---

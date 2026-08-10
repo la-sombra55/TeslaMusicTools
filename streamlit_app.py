@@ -458,20 +458,35 @@ def _render_drm_tool():
         "does). If you still have the Apple ID that bought these, most can "
         "be re-downloaded DRM-free from your purchase history."
     )
-    st.caption("Files are moved to data/output/drm_review — nothing is deleted.")
+
+    destination = _folder_picker_input(
+        "Destination folder",
+        key="drm_destination",
+        default_value="data/output/drm_review",
+        prompt="Select a destination folder",
+    )
+    st.caption(
+        "Nothing is deleted — files are moved here. Change the destination "
+        "then click \"Re-scan\" to use it."
+    )
 
     if st.button("Re-scan for DRM Files", key="rescan_drm"):
         with st.spinner("Scanning library..."):
             drm_songs = find_drm_songs(st.session_state["library_path"])
-            st.session_state["drm_plan"] = build_drm_plan(drm_songs)
+            st.session_state["drm_plan"] = build_drm_plan(drm_songs, destination_folder=destination)
 
-    drm_plan = st.session_state.get("drm_plan", {"total_files": 0, "changes": []})
+    drm_plan = st.session_state.get(
+        "drm_plan", {"total_files": 0, "destination_folder": destination, "changes": []}
+    )
 
     if drm_plan["total_files"] == 0:
         st.success("✅ No DRM-protected files found.")
         return
 
-    st.info(f"Found {drm_plan['total_files']} DRM-protected file(s).")
+    st.info(
+        f"Found {drm_plan['total_files']} DRM-protected file(s). Will move to "
+        f"{drm_plan['destination_folder']}."
+    )
 
     with st.expander("Show files", expanded=True):
         for change in drm_plan["changes"]:
@@ -495,7 +510,7 @@ def _render_drm_tool():
         moved = sum(1 for r in drm_results if r["status"] == "moved")
         failed = sum(1 for r in drm_results if r["status"] == "failed")
 
-        message = f"Moved {moved} file(s) to data/output/drm_review."
+        message = f"Moved {moved} file(s) to {drm_plan['destination_folder']}."
         if failed:
             message += f" {failed} failed."
 
@@ -521,10 +536,17 @@ def _render_duplicate_files_tool():
         "(DRM) files for read-only comparison."
     )
     st.caption(
-        "Duplicates are moved to data/output/duplicates_review — nothing is "
-        "deleted. The copy judged the best (not DRM, not an auto-renamed "
-        "\" 1\"/\"(1)\" file) is kept in place."
+        "The copy judged the best (not DRM, not an auto-renamed \" 1\"/\"(1)\" "
+        "file) is kept in place — nothing is deleted, duplicates are moved."
     )
+
+    destination = _folder_picker_input(
+        "Destination folder",
+        key="duplicate_files_destination",
+        default_value="data/output/duplicates_review",
+        prompt="Select a destination folder",
+    )
+    st.caption("Change the destination then click \"Re-scan\" to use it.")
 
     if st.button("Re-scan for Duplicate Files", key="rescan_duplicates"):
         with st.spinner("Scanning library..."):
@@ -533,15 +555,22 @@ def _render_duplicate_files_tool():
             )
             _, duplicate_artist_songs = analyzer.analyze_artists(duplicate_songs)
             duplicate_groups = find_duplicate_songs(duplicate_artist_songs)
-            st.session_state["duplicate_plan"] = build_duplicate_plan(duplicate_groups)
+            st.session_state["duplicate_plan"] = build_duplicate_plan(
+                duplicate_groups, destination_folder=destination
+            )
 
-    duplicate_plan = st.session_state.get("duplicate_plan", {"total_files": 0, "changes": []})
+    duplicate_plan = st.session_state.get(
+        "duplicate_plan", {"total_files": 0, "destination_folder": destination, "changes": []}
+    )
 
     if duplicate_plan["total_files"] == 0:
         st.success("✅ No duplicate songs found.")
         return
 
-    st.info(f"Found {duplicate_plan['total_files']} duplicate file(s) to review.")
+    st.info(
+        f"Found {duplicate_plan['total_files']} duplicate file(s) to review. Will move to "
+        f"{duplicate_plan['destination_folder']}."
+    )
 
     with st.expander("Show duplicates", expanded=True):
         for change in duplicate_plan["changes"]:
@@ -566,7 +595,7 @@ def _render_duplicate_files_tool():
         moved = sum(1 for r in duplicate_results if r["status"] == "moved")
         failed = sum(1 for r in duplicate_results if r["status"] == "failed")
 
-        message = f"Moved {moved} file(s) to data/output/duplicates_review."
+        message = f"Moved {moved} file(s) to {duplicate_plan['destination_folder']}."
         if failed:
             message += f" {failed} failed."
 
