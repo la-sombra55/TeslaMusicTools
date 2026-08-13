@@ -16,6 +16,7 @@ from tesla_music.artwork import (
     search_artwork_alternate,
 )
 from tesla_music.backup import count_backup_files, get_backup_library_path, list_backup_sessions
+from tesla_music.disk_info import format_bytes, get_volume_status
 from tesla_music.drm_files import apply_drm_moves, build_drm_plan, find_drm_songs
 from tesla_music.duplicates import (
     DUPLICATE_SCAN_EXTENSIONS,
@@ -82,6 +83,48 @@ def _format_backup_session_label(session, current_library_path, earliest_session
         label += " ⭐ (original backup for this library)"
 
     return label
+
+
+TRASH_CAPTION = (
+    "💡 macOS keeps deleted files in a hidden Trash on removable drives "
+    "until you empty it — if \"available\" looks lower than expected, try "
+    "Finder → Empty Trash on this drive."
+)
+
+
+def _render_volume_storage_info(path, needed_bytes=None):
+    """
+    Shows used/available space for a removable drive (USB stick, etc.) at
+    the given path. Does nothing for internal storage or an unresolvable
+    path. If needed_bytes is given, also warns when there isn't enough free
+    space for an export of that size.
+    """
+    status = get_volume_status(path)
+
+    if status is None or not status["is_removable"]:
+        return
+
+    label = status["volume_name"] or "this drive"
+    used = format_bytes(status["used_bytes"])
+    free = format_bytes(status["free_bytes"])
+    total = format_bytes(status["total_bytes"])
+
+    st.info(f"🔌 **{label}** — {used} used, {free} available (of {total})")
+    st.caption(TRASH_CAPTION)
+
+    if needed_bytes is None:
+        return
+
+    needed = format_bytes(needed_bytes)
+
+    if needed_bytes > status["free_bytes"]:
+        st.error(
+            f"⚠️ This export needs about {needed}, but only {free} is "
+            f"available on {label}. Free up space (see note above) or "
+            "choose a different destination."
+        )
+    else:
+        st.success(f"✅ This export needs about {needed} — {free} is available on {label}.")
 
 
 def _make_progress_callback(progress_bar, label, unit, start_time):
@@ -1102,12 +1145,16 @@ def _render_flatten_export():
     flatten_plan = st.session_state.get("flatten_plan")
 
     if flatten_plan is None:
+        _render_volume_storage_info(destination)
         return
 
     st.info(
         f"{flatten_plan['total_files']} file(s) will be copied to "
         f"{flatten_plan['destination_folder']}"
     )
+
+    needed_bytes = sum(Path(change["source"]).stat().st_size for change in flatten_plan["changes"])
+    _render_volume_storage_info(flatten_plan["destination_folder"], needed_bytes=needed_bytes)
 
     with st.expander("Show files"):
         for change in flatten_plan["changes"]:
@@ -1157,12 +1204,18 @@ def _render_artist_folder_export():
     artist_folder_plan = st.session_state.get("artist_folder_plan")
 
     if artist_folder_plan is None:
+        _render_volume_storage_info(destination)
         return
 
     st.info(
         f"{artist_folder_plan['total_files']} file(s) will be copied to "
         f"{artist_folder_plan['destination_folder']}"
     )
+
+    needed_bytes = sum(
+        Path(change["source"]).stat().st_size for change in artist_folder_plan["changes"]
+    )
+    _render_volume_storage_info(artist_folder_plan["destination_folder"], needed_bytes=needed_bytes)
 
     with st.expander("Show files"):
         for change in artist_folder_plan["changes"]:
@@ -1206,6 +1259,8 @@ def _render_csv_export():
         prompt="Select a destination folder",
     )
     filename = st.text_input("File name", value="library.csv", key="csv_filename")
+
+    _render_volume_storage_info(destination_folder)
 
     if st.button("Export CSV", type="primary", key="csv_export_button"):
         csv_progress_bar = st.progress(0, text="Starting export...")
@@ -1320,6 +1375,8 @@ with tab_review:
         col1.metric("Songs scanned", report["songs_scanned"])
         col2.metric("Unique artists", len(report["artists"]))
         col3.metric("File formats", len(format_counts))
+
+        _render_volume_storage_info(st.session_state["library_path"])
 
         with st.expander("File formats"):
             for extension, count in format_counts:
