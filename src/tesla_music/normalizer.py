@@ -1,30 +1,72 @@
-from collections import Counter
+from collections import Counter, defaultdict
 
 from tesla_music.confidence import calculate_confidence
 
 
+class _UnionFind:
+    """
+    Groups names that are similar to each other transitively, so if A~B and
+    B~C are both flagged, all three end up in one cluster instead of two
+    separate overlapping pairs (e.g. three spellings of the same artist
+    showing up as three redundant merge suggestions).
+    """
+
+    def __init__(self, items):
+        self._parent = {item: item for item in items}
+
+    def find(self, item):
+        while self._parent[item] != item:
+            self._parent[item] = self._parent[self._parent[item]]
+            item = self._parent[item]
+
+        return item
+
+    def union(self, a, b):
+        root_a, root_b = self.find(a), self.find(b)
+
+        if root_a != root_b:
+            self._parent[root_a] = root_b
+
+
 def _find_similar_names(name_counts):
-    name_list = list(name_counts.items())
+    names = list(name_counts.keys())
+    clusters = _UnionFind(names)
+    edges = defaultdict(list)
 
-    groups = []
-
-    for i, (name1, count1) in enumerate(name_list):
-
-        for name2, count2 in name_list[i + 1:]:
-
+    for i, name1 in enumerate(names):
+        for name2 in names[i + 1:]:
             confidence = calculate_confidence(name1, name2)
 
             if confidence["score"] > 0:
-                groups.append(
-                    {
-                        "names": [
-                            {"name": name1, "count": count1},
-                            {"name": name2, "count": count2},
-                        ],
-                        "score": confidence["score"],
-                        "reason": confidence["reason"],
-                    }
-                )
+                clusters.union(name1, name2)
+                edges[frozenset({name1, name2})].append(confidence)
+
+    members_by_root = defaultdict(list)
+
+    for name in names:
+        members_by_root[clusters.find(name)].append(name)
+
+    groups = []
+
+    for members in members_by_root.values():
+        if len(members) < 2:
+            continue
+
+        cluster_edges = [
+            confidence
+            for pair, confidences in edges.items()
+            if pair <= set(members)
+            for confidence in confidences
+        ]
+        weakest = min(cluster_edges, key=lambda confidence: confidence["score"])
+
+        groups.append(
+            {
+                "names": [{"name": name, "count": name_counts[name]} for name in members],
+                "score": weakest["score"],
+                "reason": weakest["reason"],
+            }
+        )
 
     return groups
 

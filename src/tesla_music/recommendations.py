@@ -8,20 +8,21 @@ def build_recommendations(duplicate_groups, artist_songs):
             reverse=True,
         )
 
+        for candidate in sorted_group:
+            candidate["songs"] = artist_songs.get(candidate["artist"], [])
+
         keep = sorted_group[0]
         changes = sorted_group[1:]
-
-        for change in changes:
-            change["songs"] = artist_songs.get(
-                change["artist"],
-                []
-            )
 
         recommendations.append(
             {
                 "keep": keep["artist"],
                 "keep_count": keep["count"],
                 "change": changes,
+                # Every variant, highest count first, each with its songs --
+                # lets the UI offer a choice of which spelling to keep
+                # instead of always defaulting to the majority.
+                "candidates": sorted_group,
                 "confidence": group["score"],
                 "reason": group["reason"],
             }
@@ -46,11 +47,11 @@ def build_album_recommendations(album_groups_by_artist, artist_songs):
                 reverse=True,
             )
 
+            for candidate in sorted_group:
+                candidate["songs"] = songs_by_album.get(candidate["album"], [])
+
             keep = sorted_group[0]
             changes = sorted_group[1:]
-
-            for change in changes:
-                change["songs"] = songs_by_album.get(change["album"], [])
 
             recommendations.append(
                 {
@@ -58,6 +59,7 @@ def build_album_recommendations(album_groups_by_artist, artist_songs):
                     "keep": keep["album"],
                     "keep_count": keep["count"],
                     "change": changes,
+                    "candidates": sorted_group,
                     "confidence": group["score"],
                     "reason": group["reason"],
                 }

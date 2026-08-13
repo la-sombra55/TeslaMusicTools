@@ -29,6 +29,34 @@ def test_find_similar_artists_groups_hyphen_variants():
     assert group["score"] > 0
 
 
+def test_find_similar_artists_clusters_more_than_two_transitively_similar_variants():
+    # Three spellings of the same artist should produce one merged cluster,
+    # not three overlapping pairwise groups (A~B, A~C, B~C).
+    artists = Counter({"Missy Elliot": 12, "Missy Elliott": 8, "MISSY ELLIOTT": 3})
+
+    groups = find_similar_artists(artists)
+
+    assert len(groups) == 1
+    group = groups[0]
+    assert {a["artist"] for a in group["artists"]} == {
+        "Missy Elliot",
+        "Missy Elliott",
+        "MISSY ELLIOTT",
+    }
+
+
+def test_find_similar_artists_uses_the_weakest_edge_confidence_in_a_cluster():
+    # "Missy Elliot"/"Missy Elliott" is only a 65%-confidence spelling
+    # guess, so the whole cluster should reflect that lower confidence
+    # even though "Missy Elliott"/"MISSY ELLIOTT" is a 95% case match.
+    artists = Counter({"Missy Elliot": 12, "Missy Elliott": 8, "MISSY ELLIOTT": 3})
+
+    groups = find_similar_artists(artists)
+
+    assert groups[0]["score"] == 65
+    assert groups[0]["reason"] == "Possible spelling variation — please review"
+
+
 def test_find_similar_artists_does_not_group_distinct_artists():
     artists = Counter({"Chris Brown": 97, "Chris Brown & Tyga": 18, "50 Cent": 1})
 

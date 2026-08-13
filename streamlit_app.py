@@ -272,6 +272,20 @@ def _render_failure_details(results, path_key, verb="processed"):
             st.caption(result.get("error", "Unknown error"))
 
 
+# Per-recommendation widget keys are index-based (e.g. "..._keep_3"), so if
+# the underlying recommendation list changes shape after a refresh, a stale
+# value at the same index would silently apply to a different recommendation
+# than the one the user actually chose it for.
+STALE_WIDGET_KEY_PREFIXES = (
+    "multi_artist_action_",
+    "multi_artist_primary_",
+    "duplicate_artist_keep_",
+    "duplicate_artist_include_",
+    "album_dedup_keep_",
+    "album_dedup_include_",
+)
+
+
 def _refresh_library_state():
     """
     Re-scans the library and rebuilds every tool's candidate list from the
@@ -280,7 +294,7 @@ def _refresh_library_state():
     plans don't reference paths that no longer exist there.
     """
     for key in list(st.session_state.keys()):
-        if key.startswith("multi_artist_action_") or key.startswith("multi_artist_primary_"):
+        if key.startswith(STALE_WIDGET_KEY_PREFIXES):
             del st.session_state[key]
 
     _run_import(st.session_state["library_path"])
@@ -372,10 +386,17 @@ def _render_normalize_tool():
 
         for i, rec in enumerate(album_recommendations):
             needs_review = rec["confidence"] < DEDUP_REVIEW_THRESHOLD
+            candidates = rec["candidates"]
+            candidate_names = [c["album"] for c in candidates]
+            variants_preview = " / ".join(candidate_names)
             label = (
-                f'{rec["artist"]} — Keep "{rec["keep"]}" — '
+                f'{rec["artist"]} — {variants_preview} — '
                 f'{rec["confidence"]}% confidence ({rec["reason"]})'
             )
+            candidate_labels = {
+                c["album"]: f'{c["album"]} ({c["count"]} song{"s" if c["count"] != 1 else ""})'
+                for c in candidates
+            }
 
             with st.expander(label, expanded=needs_review):
                 if needs_review:
@@ -384,19 +405,37 @@ def _render_normalize_tool():
                         "really the same album before including it."
                     )
 
+                keep_album = st.selectbox(
+                    "Standardize to",
+                    candidate_names,
+                    format_func=lambda name: candidate_labels[name],
+                    key=f"album_dedup_keep_{i}",
+                )
+
+                for candidate in candidates:
+                    if candidate["album"] == keep_album:
+                        continue
+
+                    st.write(
+                        f'"{candidate["album"]}" → "{keep_album}" ({candidate["count"]} songs)'
+                    )
+                    for song in candidate["songs"]:
+                        st.caption(song.path.name)
+
                 include = st.checkbox(
                     "Include this merge", value=not needs_review, key=f"album_dedup_include_{i}"
                 )
 
-                for change in rec["change"]:
-                    st.write(
-                        f'"{change["album"]}" → "{rec["keep"]}" ({change["count"]} songs)'
-                    )
-                    for song in change["songs"]:
-                        st.caption(song.path.name)
-
             if include:
-                selected_album_recommendations.append(rec)
+                selected_album_recommendations.append(
+                    {
+                        "artist": rec["artist"],
+                        "keep": keep_album,
+                        "change": [c for c in candidates if c["album"] != keep_album],
+                        "confidence": rec["confidence"],
+                        "reason": rec["reason"],
+                    }
+                )
 
     album_changes = (
         build_album_change_plan(selected_album_recommendations)["changes"]
@@ -443,7 +482,14 @@ def _render_duplicate_artist_tool():
 
     for i, rec in enumerate(recommendations):
         needs_review = rec["confidence"] < DEDUP_REVIEW_THRESHOLD
-        label = f'Keep "{rec["keep"]}" — {rec["confidence"]}% confidence ({rec["reason"]})'
+        candidates = rec["candidates"]
+        candidate_names = [c["artist"] for c in candidates]
+        variants_preview = " / ".join(candidate_names)
+        label = f'{variants_preview} — {rec["confidence"]}% confidence ({rec["reason"]})'
+        candidate_labels = {
+            c["artist"]: f'{c["artist"]} ({c["count"]} song{"s" if c["count"] != 1 else ""})'
+            for c in candidates
+        }
 
         with st.expander(label, expanded=needs_review):
             if needs_review:
@@ -452,17 +498,34 @@ def _render_duplicate_artist_tool():
                     "the same artist before including it."
                 )
 
+            keep_name = st.selectbox(
+                "Standardize to",
+                candidate_names,
+                format_func=lambda name: candidate_labels[name],
+                key=f"duplicate_artist_keep_{i}",
+            )
+
+            for candidate in candidates:
+                if candidate["artist"] == keep_name:
+                    continue
+
+                st.write(f'"{candidate["artist"]}" → "{keep_name}" ({candidate["count"]} songs)')
+                for song in candidate["songs"]:
+                    st.caption(song.path.name)
+
             include = st.checkbox(
                 "Include this merge", value=not needs_review, key=f"duplicate_artist_include_{i}"
             )
 
-            for change in rec["change"]:
-                st.write(f'"{change["artist"]}" → "{rec["keep"]}" ({change["count"]} songs)')
-                for song in change["songs"]:
-                    st.caption(song.path.name)
-
         if include:
-            selected_recommendations.append(rec)
+            selected_recommendations.append(
+                {
+                    "keep": keep_name,
+                    "change": [c for c in candidates if c["artist"] != keep_name],
+                    "confidence": rec["confidence"],
+                    "reason": rec["reason"],
+                }
+            )
 
     plan = build_change_plan(selected_recommendations)
 

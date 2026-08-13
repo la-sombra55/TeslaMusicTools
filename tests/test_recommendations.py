@@ -46,6 +46,33 @@ def test_handles_missing_artist_songs_gracefully():
     assert recommendations[0]["change"][0]["songs"] == []
 
 
+def test_candidates_includes_every_variant_sorted_by_count_with_songs(make_song):
+    duplicate_groups = [
+        {
+            "artists": [
+                {"artist": "Missy Elliot", "count": 12},
+                {"artist": "Missy Elliott", "count": 8},
+                {"artist": "MISSY ELLIOTT", "count": 3},
+            ],
+            "score": 65,
+            "reason": "Possible spelling variation — please review",
+        }
+    ]
+    artist_songs = {
+        "Missy Elliot": [make_song("a.mp3")],
+        "Missy Elliott": [make_song("b.mp3"), make_song("c.mp3")],
+        "MISSY ELLIOTT": [],
+    }
+
+    recommendations = build_recommendations(duplicate_groups, artist_songs)
+
+    candidates = recommendations[0]["candidates"]
+    assert [c["artist"] for c in candidates] == ["Missy Elliot", "Missy Elliott", "MISSY ELLIOTT"]
+    assert [c["count"] for c in candidates] == [12, 8, 3]
+    assert len(candidates[0]["songs"]) == 1
+    assert len(candidates[1]["songs"]) == 2
+
+
 def test_returns_empty_list_when_no_duplicate_groups():
     assert build_recommendations([], artist_songs={}) == []
 
@@ -137,6 +164,34 @@ def test_build_album_recommendations_does_not_mix_up_different_artists(make_song
     assert recommendations[0]["change"][0]["songs"] == [
         artist_songs["Artist A"][-1]
     ]
+
+
+def test_build_album_recommendations_candidates_includes_every_variant_with_songs(make_song):
+    album_groups_by_artist = {
+        "T.I.": [
+            {
+                "albums": [
+                    {"album": "The KING", "count": 15},
+                    {"album": "The King", "count": 1},
+                ],
+                "score": 95,
+                "reason": "Capitalization difference only",
+            }
+        ]
+    }
+    artist_songs = {
+        "T.I.": [
+            *[make_song(f"a{i}.mp3", artist="T.I.", album="The KING") for i in range(15)],
+            make_song("b.mp3", artist="T.I.", album="The King"),
+        ]
+    }
+
+    recommendations = build_album_recommendations(album_groups_by_artist, artist_songs)
+
+    candidates = recommendations[0]["candidates"]
+    assert [c["album"] for c in candidates] == ["The KING", "The King"]
+    assert len(candidates[0]["songs"]) == 15
+    assert len(candidates[1]["songs"]) == 1
 
 
 def test_build_album_recommendations_returns_empty_for_no_duplicates():
