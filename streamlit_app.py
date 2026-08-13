@@ -25,7 +25,11 @@ from tesla_music.duplicates import (
 )
 from tesla_music.csv_export import build_csv_rows, write_csv_export
 from tesla_music.feat_normalizer import find_featured_artist_changes
-from tesla_music.feat_title_consistency import find_title_feat_spelling_fixes
+from tesla_music.feat_title_consistency import (
+    build_title_feat_fix_changes,
+    find_title_feat_spelling_opportunities,
+    group_opportunities_by_artist,
+)
 from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
 from tesla_music.multi_artist import (
     SEPARATOR_AMPERSAND,
@@ -284,7 +288,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "duplicate_artist_include_",
     "album_dedup_keep_",
     "album_dedup_include_",
-    "title_feat_fix_include_",
+    "title_feat_group_include_",
 )
 
 
@@ -318,7 +322,7 @@ def _run_import(library_path):
         report["album_groups"], report["artist_songs"]
     )
     multi_artist_candidates = find_multi_artist_credits(report["artist_songs"])
-    title_feat_fixes = find_title_feat_spelling_fixes(report["artist_songs"])
+    title_feat_opportunities = find_title_feat_spelling_opportunities(report["artist_songs"])
 
     duplicate_scan_songs = scan_library(library_path, extensions=DUPLICATE_SCAN_EXTENSIONS)
     _, duplicate_artist_songs = analyzer.analyze_artists(
@@ -341,7 +345,7 @@ def _run_import(library_path):
     st.session_state["feat_changes"] = feat_changes
     st.session_state["album_recommendations"] = album_recommendations
     st.session_state["multi_artist_candidates"] = multi_artist_candidates
-    st.session_state["title_feat_fixes"] = title_feat_fixes
+    st.session_state["title_feat_opportunities"] = title_feat_opportunities
     st.session_state["duplicate_plan"] = duplicate_plan
     st.session_state["drm_plan"] = drm_plan
 
@@ -349,6 +353,7 @@ def _run_import(library_path):
         "normalize_apply_results",
         "duplicate_artist_apply_results",
         "multi_artist_apply_results",
+        "title_feat_apply_results",
         "artwork_plan",
         "flatten_plan",
         "restore_plan",
@@ -370,9 +375,8 @@ def _render_normalize_tool():
 
     feat_changes = st.session_state.get("feat_changes", [])
     album_recommendations = st.session_state.get("album_recommendations", [])
-    title_feat_fixes = st.session_state.get("title_feat_fixes", [])
 
-    if not feat_changes and not album_recommendations and not title_feat_fixes:
+    if not feat_changes and not album_recommendations:
         st.success("✅ Nothing to normalize — no featuring credits or duplicate albums found.")
         return
 
@@ -448,43 +452,7 @@ def _render_normalize_tool():
         else []
     )
 
-    selected_title_feat_fixes = []
-
-    if title_feat_fixes:
-        st.write("**Featured-credit spelling in titles**")
-        st.caption(
-            "Catches a featured-artist credit inside a song's Title that's "
-            "spelled differently than that artist's current Artist tag "
-            "elsewhere in your library — the song's own Artist tag isn't "
-            "touched, just the credited name inside the title."
-        )
-
-        for i, change in enumerate(title_feat_fixes):
-            needs_review = change["confidence"] < DEDUP_REVIEW_THRESHOLD
-            label = (
-                f'{Path(change["file"]).name} — {change["confidence"]}% confidence '
-                f'({change["reason"]})'
-            )
-
-            with st.expander(label, expanded=needs_review):
-                if needs_review:
-                    st.caption(
-                        "⚠️ Lower-confidence match — double-check this is really "
-                        "the same artist before including it."
-                    )
-
-                st.write(f'"{change["current_title"]}" → "{change["new_title"]}"')
-
-                include = st.checkbox(
-                    "Include this fix",
-                    value=not needs_review,
-                    key=f"title_feat_fix_include_{i}",
-                )
-
-            if include:
-                selected_title_feat_fixes.append(change)
-
-    plan = build_plan(feat_changes + album_changes + selected_title_feat_fixes)
+    plan = build_plan(feat_changes + album_changes)
 
     st.warning(f"{plan['total_changes']} file(s) will be changed.")
 
@@ -853,6 +821,90 @@ def _render_multi_artist_tool():
         _print_apply_results(results)
 
 
+def _render_title_feat_consistency_tool():
+    st.subheader("Featured-Credit Spelling")
+    st.write(
+        "Finds a featured-artist credit inside a song's Title (e.g. \"(feat. "
+        "Missy Elliot)\") that's spelled differently than that artist's "
+        "current spelling in your library's Artist tags — only the credited "
+        "name inside the title changes, songs' own Artist tags aren't touched."
+    )
+
+    opportunities = st.session_state.get("title_feat_opportunities", [])
+    groups = group_opportunities_by_artist(opportunities)
+
+    if not groups:
+        st.success("✅ No featured-credit spelling mismatches found.")
+        return
+
+    approved_opportunities = []
+
+    for i, group in enumerate(groups):
+        needs_review = group["confidence"] < DEDUP_REVIEW_THRESHOLD
+        plural = "s" if group["song_count"] != 1 else ""
+        label = (
+            f'{group["artist"]} — {group["song_count"]} song{plural} — '
+            f'{group["confidence"]}% confidence ({group["reason"]})'
+        )
+
+        with st.expander(label, expanded=needs_review):
+            st.write(
+                f'Your library spells this artist **"{group["artist"]}"** in the '
+                f'Artist field. {group["song_count"]} song{plural} credit them '
+                "under a different spelling in the title."
+            )
+
+            if needs_review:
+                st.caption(
+                    "⚠️ Lower-confidence match — double-check these are really "
+                    "the same artist before including it."
+                )
+
+            with st.expander("Show affected songs"):
+                for opportunity in group["opportunities"]:
+                    st.caption(
+                        f'{Path(opportunity["file"]).name} — credited as '
+                        f'"{opportunity["misspelled_as"]}"'
+                    )
+
+            include = st.checkbox(
+                f'Normalize these to "{group["artist"]}"',
+                value=not needs_review,
+                key=f"title_feat_group_include_{i}",
+            )
+
+        if include:
+            approved_opportunities.extend(group["opportunities"])
+
+    changes = build_title_feat_fix_changes(
+        approved_opportunities, st.session_state["report"]["artist_songs"]
+    )
+    plan = build_plan(changes)
+
+    st.warning(f"{plan['total_changes']} file(s) will be changed.")
+
+    confirm = st.checkbox(
+        "I understand this will modify my music files (a backup is made first)",
+        key="confirm_title_feat_consistency",
+    )
+
+    if st.button(
+        "Apply Spelling Fixes",
+        type="primary",
+        disabled=not confirm or plan["total_changes"] == 0,
+        key="apply_title_feat_consistency",
+    ):
+        st.session_state["title_feat_apply_results"] = apply_changes(
+            plan, dry_run=False, library_path=st.session_state["library_path"]
+        )
+        st.rerun()
+
+    results = st.session_state.get("title_feat_apply_results")
+
+    if results:
+        _print_apply_results(results)
+
+
 def _render_artwork_tool():
     st.subheader("Artwork")
     st.write(
@@ -1170,6 +1222,7 @@ CLEAN_UP_TOOLS = {
     "DRM Files": _render_drm_tool,
     "Duplicate Files": _render_duplicate_files_tool,
     "Multi-Artist Credits": _render_multi_artist_tool,
+    "Featured-Credit Spelling": _render_title_feat_consistency_tool,
     "Artwork": _render_artwork_tool,
 }
 
