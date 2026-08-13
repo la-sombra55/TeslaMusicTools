@@ -36,6 +36,35 @@ def test_split_featured_artist_does_not_match_feat_fused_inside_a_word():
     assert split_featured_artist("Defeat Devices") is None
 
 
+def test_split_featured_artist_handles_feat_period_with_no_space():
+    # Regression test: "Feat.Swizz Beatz" has no space after the period.
+    assert split_featured_artist("Busta Rhymes Feat.Swizz Beatz") == (
+        "Busta Rhymes",
+        "Swizz Beatz",
+    )
+
+
+def test_split_featured_artist_handles_ft_period_with_no_space():
+    assert split_featured_artist("Busta Rhymes Ft.Swizz Beatz") == (
+        "Busta Rhymes",
+        "Swizz Beatz",
+    )
+
+
+def test_split_featured_artist_handles_a_misspelled_featuring():
+    # Regression test: "featurining" (extra "in") wasn't caught by the
+    # exact keyword pattern.
+    assert split_featured_artist("Fabolous featurining Ransom") == ("Fabolous", "Ransom")
+
+
+def test_split_featured_artist_fuzzy_fallback_does_not_match_a_real_name():
+    # "Featherstone" is textually close to "featuring" but is a real name,
+    # not a typo of it -- and even if it were flagged, there'd be no
+    # featured-artist text left to split off.
+    assert split_featured_artist("Featherstone") is None
+    assert split_featured_artist("XYZ Featherstone") is None
+
+
 def test_build_feat_title_appends_when_missing():
     assert build_feat_title("Girls Like You", "Cardi B") == "Girls Like You (feat. Cardi B)"
 
@@ -43,6 +72,32 @@ def test_build_feat_title_appends_when_missing():
 def test_build_feat_title_leaves_title_unchanged_if_already_present():
     title = "Girls Like You (feat. Cardi B)"
     assert build_feat_title(title, "Cardi B") == title
+
+
+def test_build_feat_title_merges_into_an_existing_feat_list_with_other_names():
+    # Regression test: a title already crediting other featured artists was
+    # wrongly left untouched instead of adding this one to the list.
+    title = (
+        "This Is Family (Bonus Track) (feat. Freck Billionaire, Red Cafe, "
+        "Joe Budden & Paul Cain)"
+    )
+
+    result = build_feat_title(title, "Ransom")
+
+    assert result == (
+        "This Is Family (Bonus Track) (feat. Freck Billionaire, Red Cafe, "
+        "Joe Budden, Paul Cain & Ransom)"
+    )
+
+
+def test_build_feat_title_does_not_duplicate_an_already_credited_name():
+    title = "Girls Like You (feat. Cardi B & Offset)"
+    assert build_feat_title(title, "Cardi B") == title
+
+
+def test_build_feat_title_merges_into_a_single_existing_featured_name():
+    title = "Girls Like You (feat. Cardi B)"
+    assert build_feat_title(title, "Offset") == "Girls Like You (feat. Cardi B & Offset)"
 
 
 def test_find_featured_artist_changes_produces_one_change_per_song(make_song):
