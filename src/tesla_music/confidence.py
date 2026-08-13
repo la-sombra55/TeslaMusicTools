@@ -1,4 +1,11 @@
 import unicodedata
+from difflib import SequenceMatcher
+
+# Below this length, a high similarity ratio is too easy to hit by chance
+# (e.g. "Nas" vs "Nash" is 86% similar despite being different artists), so
+# the fuzzy tier is skipped for short names.
+FUZZY_MATCH_MIN_LENGTH = 6
+FUZZY_MATCH_THRESHOLD = 0.90
 
 
 def calculate_confidence(artist1, artist2):
@@ -43,10 +50,49 @@ def calculate_confidence(artist1, artist2):
             "reason": "Word order difference",
         }
 
+    # Catches punctuation (R Kelly / R. Kelly, Lil Wayne / Lil' Wayne, T.I. /
+    # TI) and compound-word spacing (Outkast / Out Kast, Sugarhill Gang /
+    # Sugar Hill Gang) -- same letters in the same order once everything
+    # but letters/digits is dropped, so this is still a near-certain match.
+    key1 = _letters_only(artist1)
+    key2 = _letters_only(artist2)
+
+    if key1 == key2:
+        return {
+            "score": 90,
+            "reason": "Punctuation or spacing difference only",
+        }
+
+    # Catches actual spelling variants (Missy Elliot / Missy Elliott) that
+    # aren't the same letters in a different arrangement -- inherently a
+    # guess, so this is scored low and meant to be reviewed, not trusted.
+    # Skipped for names with digits: a digit difference ("Artist 0001" vs
+    # "Artist 0002") is almost always a genuinely different, meaningful
+    # identifier rather than a typo, and real stage names with numbers
+    # ("50 Cent", "Blink-182", "Sum 41") should never be fuzzy-merged.
+    if (
+        min(len(key1), len(key2)) >= FUZZY_MATCH_MIN_LENGTH
+        and key1.isalpha()
+        and key2.isalpha()
+    ):
+        similarity = SequenceMatcher(None, key1, key2).ratio()
+
+        if similarity >= FUZZY_MATCH_THRESHOLD:
+            return {
+                "score": 65,
+                "reason": "Possible spelling variation — please review",
+            }
+
     return {
         "score": 0,
         "reason": "No match",
     }
+
+
+def _letters_only(name):
+    name = strip_accents(name.lower())
+
+    return "".join(char for char in name if char.isalnum())
 
 
 def strip_accents(name):

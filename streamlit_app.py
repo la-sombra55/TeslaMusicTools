@@ -40,6 +40,11 @@ from tesla_music.scanner import scan_library
 
 DEFAULT_LIBRARY_PATH = "data/input"
 
+# Merges/renames scored below this need a human look before being trusted
+# (currently just the fuzzy spelling-variation tier) -- their checkbox
+# defaults to unchecked instead of being bundled into "apply everything".
+DEDUP_REVIEW_THRESHOLD = 85
+
 
 # --- Shared helpers ---
 
@@ -360,15 +365,29 @@ def _render_normalize_tool():
                 st.write(f"Artist: {change['current_artist']} → {change['new_artist']}")
                 st.write(f"Title: {change['current_title']} → {change['new_title']}")
 
+    selected_album_recommendations = []
+
     if album_recommendations:
         st.write("**Duplicate album spellings**")
 
-        for rec in album_recommendations:
+        for i, rec in enumerate(album_recommendations):
+            needs_review = rec["confidence"] < DEDUP_REVIEW_THRESHOLD
             label = (
                 f'{rec["artist"]} — Keep "{rec["keep"]}" — '
                 f'{rec["confidence"]}% confidence ({rec["reason"]})'
             )
-            with st.expander(label):
+
+            with st.expander(label, expanded=needs_review):
+                if needs_review:
+                    st.caption(
+                        "⚠️ Lower-confidence match — double-check these are "
+                        "really the same album before including it."
+                    )
+
+                include = st.checkbox(
+                    "Include this merge", value=not needs_review, key=f"album_dedup_include_{i}"
+                )
+
                 for change in rec["change"]:
                     st.write(
                         f'"{change["album"]}" → "{rec["keep"]}" ({change["count"]} songs)'
@@ -376,9 +395,12 @@ def _render_normalize_tool():
                     for song in change["songs"]:
                         st.caption(song.path.name)
 
+            if include:
+                selected_album_recommendations.append(rec)
+
     album_changes = (
-        build_album_change_plan(album_recommendations)["changes"]
-        if album_recommendations
+        build_album_change_plan(selected_album_recommendations)["changes"]
+        if selected_album_recommendations
         else []
     )
     plan = build_plan(feat_changes + album_changes)
@@ -391,7 +413,10 @@ def _render_normalize_tool():
     )
 
     if st.button(
-        "Apply Normalize Changes", type="primary", disabled=not confirm, key="apply_normalize"
+        "Apply Normalize Changes",
+        type="primary",
+        disabled=not confirm or plan["total_changes"] == 0,
+        key="apply_normalize",
     ):
         st.session_state["normalize_apply_results"] = apply_changes(
             plan, dry_run=False, library_path=st.session_state["library_path"]
@@ -414,15 +439,32 @@ def _render_duplicate_artist_tool():
         st.success("✅ No duplicate artist spellings found.")
         return
 
-    for rec in recommendations:
+    selected_recommendations = []
+
+    for i, rec in enumerate(recommendations):
+        needs_review = rec["confidence"] < DEDUP_REVIEW_THRESHOLD
         label = f'Keep "{rec["keep"]}" — {rec["confidence"]}% confidence ({rec["reason"]})'
-        with st.expander(label):
+
+        with st.expander(label, expanded=needs_review):
+            if needs_review:
+                st.caption(
+                    "⚠️ Lower-confidence match — double-check these are really "
+                    "the same artist before including it."
+                )
+
+            include = st.checkbox(
+                "Include this merge", value=not needs_review, key=f"duplicate_artist_include_{i}"
+            )
+
             for change in rec["change"]:
                 st.write(f'"{change["artist"]}" → "{rec["keep"]}" ({change["count"]} songs)')
                 for song in change["songs"]:
                     st.caption(song.path.name)
 
-    plan = build_change_plan(recommendations)
+        if include:
+            selected_recommendations.append(rec)
+
+    plan = build_change_plan(selected_recommendations)
 
     st.warning(f"{plan['total_changes']} file(s) will be changed.")
 
@@ -434,7 +476,7 @@ def _render_duplicate_artist_tool():
     if st.button(
         "Apply Artist Merges",
         type="primary",
-        disabled=not confirm,
+        disabled=not confirm or plan["total_changes"] == 0,
         key="apply_duplicate_artist",
     ):
         st.session_state["duplicate_artist_apply_results"] = apply_changes(
