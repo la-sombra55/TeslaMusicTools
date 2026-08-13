@@ -1,53 +1,60 @@
 from tesla_music.feat_title_consistency import (
-    build_title_feat_fix_changes,
-    find_title_feat_spelling_opportunities,
-    group_opportunities_by_artist,
+    build_artist_spelling_changes,
+    find_artist_spelling_groups,
 )
 
 
-def test_finds_a_misspelled_feat_credit_against_a_known_artist(make_song):
+def _spelling_counts(group):
+    return {s["spelling"]: len(s["mentions"]) for s in group["spellings"]}
+
+
+def test_groups_artist_tag_and_title_feat_spellings_together(make_song):
     artist_songs = {
-        "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott", title="Work It")],
+        "JILL SCOTT": [make_song("a.mp3", artist="JILL SCOTT")],
         "Ciara": [
-            make_song(
-                "b.mp3",
-                artist="Ciara",
-                title="Let It Go Remix (feat. Missy Elliot)",
-            )
+            make_song("b.mp3", artist="Ciara", title="Song One (feat. Jill Scott)")
+        ],
+        "Erykah Badu": [
+            make_song("c.mp3", artist="Erykah Badu", title="Song Two (feat. Jill Scot)")
         ],
     }
 
-    opportunities = find_title_feat_spelling_opportunities(artist_songs)
+    groups = find_artist_spelling_groups(artist_songs)
 
-    assert len(opportunities) == 1
-    opportunity = opportunities[0]
-    assert opportunity["file"] == "b.mp3"
-    assert opportunity["artist"] == "Missy Elliott"
-    assert opportunity["misspelled_as"] == "Missy Elliot"
-    assert opportunity["confidence"] == 65
-    assert "Possible spelling variation" in opportunity["reason"]
+    assert len(groups) == 1
+    group = groups[0]
+    assert _spelling_counts(group) == {"JILL SCOTT": 1, "Jill Scott": 1, "Jill Scot": 1}
+    assert group["total_count"] == 3
 
 
-def test_finds_only_the_mismatched_name_in_a_multi_artist_credit(make_song):
+def test_spellings_are_sorted_by_mention_count_descending(make_song):
     artist_songs = {
-        "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott")],
-        "Nelly Furtado": [make_song("n.mp3", artist="Nelly Furtado")],
+        "JILL SCOTT": [
+            make_song("a.mp3", artist="JILL SCOTT"),
+            make_song("b.mp3", artist="JILL SCOTT"),
+        ],
         "Ciara": [
-            make_song(
-                "b.mp3",
-                artist="Ciara",
-                title="Get Ur Freak On (feat. Nelly Furtado & Missy Elliot)",
-            )
+            make_song("c.mp3", artist="Ciara", title="Song One (feat. Jill Scott)")
         ],
     }
 
-    opportunities = find_title_feat_spelling_opportunities(artist_songs)
+    groups = find_artist_spelling_groups(artist_songs)
 
-    assert len(opportunities) == 1
-    assert opportunities[0]["misspelled_as"] == "Missy Elliot"
+    assert [s["spelling"] for s in groups[0]["spellings"]] == ["JILL SCOTT", "Jill Scott"]
 
 
-def test_ignores_a_feat_credit_that_already_matches_a_known_artist(make_song):
+def test_excludes_clusters_with_no_featured_credit_involved(make_song):
+    # A pure Artist-tag-vs-Artist-tag mismatch (no title credit involved) is
+    # Duplicate Artist's job, not this tool's -- shouldn't show up here.
+    artist_songs = {
+        "Chris Brown": [make_song("a.mp3", artist="Chris Brown")],
+        "chris brown": [make_song("b.mp3", artist="chris brown")],
+    }
+
+    assert find_artist_spelling_groups(artist_songs) == []
+
+
+def test_excludes_a_feat_credit_that_already_matches_the_only_known_spelling(make_song):
     artist_songs = {
         "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott")],
         "Someone": [
@@ -55,136 +62,75 @@ def test_ignores_a_feat_credit_that_already_matches_a_known_artist(make_song):
         ],
     }
 
-    assert find_title_feat_spelling_opportunities(artist_songs) == []
-
-
-def test_ignores_titles_with_no_feat_credit(make_song):
-    artist_songs = {
-        "Someone": [make_song("d.mp3", artist="Someone", title="No Feat Credit")],
-    }
-
-    assert find_title_feat_spelling_opportunities(artist_songs) == []
-
-
-def test_ignores_a_feat_credit_that_does_not_match_any_known_artist(make_song):
-    artist_songs = {
-        "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott")],
-        "Someone": [
-            make_song("e.mp3", artist="Someone", title="A Song (feat. Totally Unrelated Act)")
-        ],
-    }
-
-    assert find_title_feat_spelling_opportunities(artist_songs) == []
+    assert find_artist_spelling_groups(artist_songs) == []
 
 
 def test_returns_empty_list_for_no_songs():
-    assert find_title_feat_spelling_opportunities({}) == []
+    assert find_artist_spelling_groups({}) == []
 
 
-# --- group_opportunities_by_artist ---
+# --- build_artist_spelling_changes ---
 
 
-def test_groups_multiple_songs_crediting_the_same_artist_into_one_group(make_song):
+def test_builds_artist_tag_and_title_changes_for_the_preferred_spelling(make_song):
     artist_songs = {
-        "Pharrell": [make_song("p.mp3", artist="Pharrell")],
-        "Song A": [
-            make_song("a.mp3", artist="Song A", title="Track One (feat. Pharell)")
-        ],
-        "Song B": [
-            make_song("b.mp3", artist="Song B", title="Track Two (feat. Pharrel)")
-        ],
-    }
-
-    opportunities = find_title_feat_spelling_opportunities(artist_songs)
-    groups = group_opportunities_by_artist(opportunities)
-
-    assert len(groups) == 1
-    group = groups[0]
-    assert group["artist"] == "Pharrell"
-    assert group["song_count"] == 2
-    assert len(group["opportunities"]) == 2
-
-
-def test_group_confidence_is_the_weakest_of_its_opportunities(make_song):
-    artist_songs = {
-        "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott")],
-        "Song A": [
-            # Punctuation-only difference -> 90% confidence
-            make_song("b.mp3", artist="Song A", title="Track (feat. Missy Elliott.)")
-        ],
-        "Song B": [
-            # Spelling variation -> 65% confidence
-            make_song("c.mp3", artist="Song B", title="Track Two (feat. Missy Elliot)")
-        ],
-    }
-
-    opportunities = find_title_feat_spelling_opportunities(artist_songs)
-    groups = group_opportunities_by_artist(opportunities)
-
-    assert groups[0]["confidence"] == 65
-
-
-def test_group_opportunities_by_artist_returns_empty_for_no_opportunities():
-    assert group_opportunities_by_artist([]) == []
-
-
-# --- build_title_feat_fix_changes ---
-
-
-def test_builds_the_corrected_title_for_approved_opportunities(make_song):
-    artist_songs = {
-        "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott")],
+        "JILL SCOTT": [make_song("a.mp3", artist="JILL SCOTT", title="Golden")],
         "Ciara": [
-            make_song(
-                "b.mp3", artist="Ciara", title="Let It Go Remix (feat. Missy Elliot)"
-            )
+            make_song("b.mp3", artist="Ciara", title="Song One (feat. Jill Scott)")
+        ],
+        "Erykah Badu": [
+            make_song("c.mp3", artist="Erykah Badu", title="Song Two (feat. Jill Scot)")
         ],
     }
 
-    opportunities = find_title_feat_spelling_opportunities(artist_songs)
-    changes = build_title_feat_fix_changes(opportunities, artist_songs)
+    groups = find_artist_spelling_groups(artist_songs)
+    changes = build_artist_spelling_changes("Jill Scott", groups[0], artist_songs)
 
-    assert len(changes) == 1
-    change = changes[0]
-    assert change["file"] == "b.mp3"
-    assert change["current_title"] == "Let It Go Remix (feat. Missy Elliot)"
-    assert change["new_title"] == "Let It Go Remix (feat. Missy Elliott)"
-    assert "new_artist" not in change
+    changes_by_file = {c["file"]: c for c in changes}
+
+    assert changes_by_file["a.mp3"]["current_artist"] == "JILL SCOTT"
+    assert changes_by_file["a.mp3"]["new_artist"] == "Jill Scott"
+    assert "new_title" not in changes_by_file["a.mp3"]
+
+    assert changes_by_file["c.mp3"]["current_title"] == "Song Two (feat. Jill Scot)"
+    assert changes_by_file["c.mp3"]["new_title"] == "Song Two (feat. Jill Scott)"
+    assert "new_artist" not in changes_by_file["c.mp3"]
+
+    # b.mp3 already says "Jill Scott" in its title credit -- nothing to fix.
+    assert "b.mp3" not in changes_by_file
 
 
-def test_only_applies_corrections_for_approved_names_in_a_multi_artist_credit(make_song):
+def test_no_changes_needed_when_preferred_spelling_is_already_used_everywhere(make_song):
     artist_songs = {
-        "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott")],
+        "JILL SCOTT": [make_song("a.mp3", artist="JILL SCOTT")],
+        "Ciara": [
+            make_song("b.mp3", artist="Ciara", title="Song One (feat. Jill Scott)")
+        ],
+    }
+
+    groups = find_artist_spelling_groups(artist_songs)
+    changes = build_artist_spelling_changes("JILL SCOTT", groups[0], artist_songs)
+
+    changes_by_file = {c["file"]: c for c in changes}
+    assert "a.mp3" not in changes_by_file
+    assert changes_by_file["b.mp3"]["new_title"] == "Song One (feat. JILL SCOTT)"
+
+
+def test_only_corrects_the_matching_name_in_a_multi_artist_title_credit(make_song):
+    artist_songs = {
+        "Jill Scott": [make_song("a.mp3", artist="Jill Scott")],
         "Nelly Furtado": [make_song("n.mp3", artist="Nelly Furtado")],
         "Ciara": [
             make_song(
                 "b.mp3",
                 artist="Ciara",
-                title="Get Ur Freak On (feat. Nelly Furtado & Missy Elliot)",
+                title="Song One (feat. Nelly Furtado & Jill Scot)",
             )
         ],
     }
 
-    opportunities = find_title_feat_spelling_opportunities(artist_songs)
+    groups = find_artist_spelling_groups(artist_songs)
+    changes = build_artist_spelling_changes("Jill Scott", groups[0], artist_songs)
 
-    # Approve only the Missy Elliott fix (there's only one opportunity here
-    # anyway since Nelly Furtado already matches, but this exercises the
-    # "approved subset" filtering path explicitly).
-    changes = build_title_feat_fix_changes(opportunities, artist_songs)
-
-    assert changes[0]["new_title"] == (
-        "Get Ur Freak On (feat. Nelly Furtado & Missy Elliott)"
-    )
-
-
-def test_build_title_feat_fix_changes_returns_empty_for_no_approved_opportunities(make_song):
-    artist_songs = {
-        "Missy Elliott": [make_song("a.mp3", artist="Missy Elliott")],
-        "Ciara": [
-            make_song(
-                "b.mp3", artist="Ciara", title="Let It Go Remix (feat. Missy Elliot)"
-            )
-        ],
-    }
-
-    assert build_title_feat_fix_changes([], artist_songs) == []
+    change = next(c for c in changes if c["file"] == "b.mp3")
+    assert change["new_title"] == "Song One (feat. Nelly Furtado & Jill Scott)"

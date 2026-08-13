@@ -26,9 +26,8 @@ from tesla_music.duplicates import (
 from tesla_music.csv_export import build_csv_rows, write_csv_export
 from tesla_music.feat_normalizer import find_featured_artist_changes
 from tesla_music.feat_title_consistency import (
-    build_title_feat_fix_changes,
-    find_title_feat_spelling_opportunities,
-    group_opportunities_by_artist,
+    build_artist_spelling_changes,
+    find_artist_spelling_groups,
 )
 from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
 from tesla_music.multi_artist import (
@@ -289,6 +288,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "album_dedup_keep_",
     "album_dedup_include_",
     "title_feat_group_include_",
+    "title_feat_preferred_",
 )
 
 
@@ -322,7 +322,7 @@ def _run_import(library_path):
         report["album_groups"], report["artist_songs"]
     )
     multi_artist_candidates = find_multi_artist_credits(report["artist_songs"])
-    title_feat_opportunities = find_title_feat_spelling_opportunities(report["artist_songs"])
+    artist_spelling_groups = find_artist_spelling_groups(report["artist_songs"])
 
     duplicate_scan_songs = scan_library(library_path, extensions=DUPLICATE_SCAN_EXTENSIONS)
     _, duplicate_artist_songs = analyzer.analyze_artists(
@@ -345,7 +345,7 @@ def _run_import(library_path):
     st.session_state["feat_changes"] = feat_changes
     st.session_state["album_recommendations"] = album_recommendations
     st.session_state["multi_artist_candidates"] = multi_artist_candidates
-    st.session_state["title_feat_opportunities"] = title_feat_opportunities
+    st.session_state["artist_spelling_groups"] = artist_spelling_groups
     st.session_state["duplicate_plan"] = duplicate_plan
     st.session_state["drm_plan"] = drm_plan
 
@@ -824,62 +824,84 @@ def _render_multi_artist_tool():
 def _render_title_feat_consistency_tool():
     st.subheader("Featured-Credit Spelling")
     st.write(
-        "Finds a featured-artist credit inside a song's Title (e.g. \"(feat. "
-        "Missy Elliot)\") that's spelled differently than that artist's "
-        "current spelling in your library's Artist tags — only the credited "
-        "name inside the title changes, songs' own Artist tags aren't touched."
+        "Finds every spelling of an artist used anywhere in your library — "
+        "as a primary Artist tag, or as a featured credit inside another "
+        "song's Title (e.g. \"(feat. Missy Elliot)\") — and lets you pick "
+        "one preferred spelling to apply everywhere."
     )
 
-    opportunities = st.session_state.get("title_feat_opportunities", [])
-    groups = group_opportunities_by_artist(opportunities)
+    artist_songs = st.session_state["report"]["artist_songs"]
+    groups = st.session_state.get("artist_spelling_groups", [])
 
     if not groups:
-        st.success("✅ No featured-credit spelling mismatches found.")
+        st.success("✅ No spelling inconsistencies found.")
         return
 
-    approved_opportunities = []
+    all_changes = []
 
     for i, group in enumerate(groups):
         needs_review = group["confidence"] < DEDUP_REVIEW_THRESHOLD
-        plural = "s" if group["song_count"] != 1 else ""
+        spelling_names = [s["spelling"] for s in group["spellings"]]
+        variants_preview = " / ".join(spelling_names)
         label = (
-            f'{group["artist"]} — {group["song_count"]} song{plural} — '
+            f'{variants_preview} — {group["total_count"]} song(s) — '
             f'{group["confidence"]}% confidence ({group["reason"]})'
         )
 
         with st.expander(label, expanded=needs_review):
-            st.write(
-                f'Your library spells this artist **"{group["artist"]}"** in the '
-                f'Artist field. {group["song_count"]} song{plural} credit them '
-                "under a different spelling in the title."
-            )
-
             if needs_review:
                 st.caption(
                     "⚠️ Lower-confidence match — double-check these are really "
                     "the same artist before including it."
                 )
 
-            with st.expander("Show affected songs"):
-                for opportunity in group["opportunities"]:
-                    st.caption(
-                        f'{Path(opportunity["file"]).name} — credited as '
-                        f'"{opportunity["misspelled_as"]}"'
-                    )
+            before_col, choose_col, after_col = st.columns([2, 2, 2])
+
+            with before_col:
+                st.write("**Before**")
+                for spelling in group["spellings"]:
+                    count = len(spelling["mentions"])
+                    plural = "s" if count != 1 else ""
+                    st.caption(f'{spelling["spelling"]} ({count} song{plural})')
+
+            with choose_col:
+                preferred_spelling = st.selectbox(
+                    "Choose preferred artist spelling",
+                    spelling_names,
+                    key=f"title_feat_preferred_{i}",
+                )
+
+            with after_col:
+                total_plural = "s" if group["total_count"] != 1 else ""
+                st.write("**After**")
+                st.caption(f'{preferred_spelling} ({group["total_count"]} song{total_plural})')
+
+            with st.expander("Songs updated"):
+                for spelling in group["spellings"]:
+                    if spelling["spelling"] == preferred_spelling:
+                        continue
+
+                    for mention in spelling["mentions"]:
+                        source_label = (
+                            "Artist tag" if mention["source"] == "artist_tag" else "Title credit"
+                        )
+                        st.caption(
+                            f'{Path(mention["file"]).name} — {source_label} — was '
+                            f'"{spelling["spelling"]}"'
+                        )
 
             include = st.checkbox(
-                f'Normalize these to "{group["artist"]}"',
+                f'Normalize to "{preferred_spelling}"',
                 value=not needs_review,
                 key=f"title_feat_group_include_{i}",
             )
 
         if include:
-            approved_opportunities.extend(group["opportunities"])
+            all_changes.extend(
+                build_artist_spelling_changes(preferred_spelling, group, artist_songs)
+            )
 
-    changes = build_title_feat_fix_changes(
-        approved_opportunities, st.session_state["report"]["artist_songs"]
-    )
-    plan = build_plan(changes)
+    plan = build_plan(all_changes)
 
     st.warning(f"{plan['total_changes']} file(s) will be changed.")
 

@@ -28,9 +28,18 @@ class _UnionFind:
             self._parent[root_a] = root_b
 
 
-def _find_similar_names(name_counts):
-    names = list(name_counts.keys())
-    clusters = _UnionFind(names)
+def cluster_similar_names(names):
+    """
+    Groups names that are similar to each other (transitively, via a
+    union-find over calculate_confidence) into clusters, so three spellings
+    of the same name end up in one cluster instead of three separate
+    overlapping pairs. A cluster's score/reason come from its weakest
+    pairwise edge -- if any one match in the cluster is only a guess, the
+    whole cluster is treated that cautiously. Clusters of a single name
+    (nothing to merge) are excluded.
+    """
+    names = list(names)
+    union_find = _UnionFind(names)
     edges = defaultdict(list)
 
     for i, name1 in enumerate(names):
@@ -38,15 +47,15 @@ def _find_similar_names(name_counts):
             confidence = calculate_confidence(name1, name2)
 
             if confidence["score"] > 0:
-                clusters.union(name1, name2)
+                union_find.union(name1, name2)
                 edges[frozenset({name1, name2})].append(confidence)
 
     members_by_root = defaultdict(list)
 
     for name in names:
-        members_by_root[clusters.find(name)].append(name)
+        members_by_root[union_find.find(name)].append(name)
 
-    groups = []
+    clusters = []
 
     for members in members_by_root.values():
         if len(members) < 2:
@@ -60,15 +69,28 @@ def _find_similar_names(name_counts):
         ]
         weakest = min(cluster_edges, key=lambda confidence: confidence["score"])
 
-        groups.append(
+        clusters.append(
             {
-                "names": [{"name": name, "count": name_counts[name]} for name in members],
+                "members": members,
                 "score": weakest["score"],
                 "reason": weakest["reason"],
             }
         )
 
-    return groups
+    return clusters
+
+
+def _find_similar_names(name_counts):
+    clusters = cluster_similar_names(name_counts.keys())
+
+    return [
+        {
+            "names": [{"name": name, "count": name_counts[name]} for name in cluster["members"]],
+            "score": cluster["score"],
+            "reason": cluster["reason"],
+        }
+        for cluster in clusters
+    ]
 
 
 def find_similar_artists(artists):
