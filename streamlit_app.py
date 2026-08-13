@@ -25,6 +25,7 @@ from tesla_music.duplicates import (
 )
 from tesla_music.csv_export import build_csv_rows, write_csv_export
 from tesla_music.feat_normalizer import find_featured_artist_changes
+from tesla_music.feat_title_consistency import find_title_feat_spelling_fixes
 from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
 from tesla_music.multi_artist import (
     SEPARATOR_AMPERSAND,
@@ -283,6 +284,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "duplicate_artist_include_",
     "album_dedup_keep_",
     "album_dedup_include_",
+    "title_feat_fix_include_",
 )
 
 
@@ -316,6 +318,7 @@ def _run_import(library_path):
         report["album_groups"], report["artist_songs"]
     )
     multi_artist_candidates = find_multi_artist_credits(report["artist_songs"])
+    title_feat_fixes = find_title_feat_spelling_fixes(report["artist_songs"])
 
     duplicate_scan_songs = scan_library(library_path, extensions=DUPLICATE_SCAN_EXTENSIONS)
     _, duplicate_artist_songs = analyzer.analyze_artists(
@@ -338,6 +341,7 @@ def _run_import(library_path):
     st.session_state["feat_changes"] = feat_changes
     st.session_state["album_recommendations"] = album_recommendations
     st.session_state["multi_artist_candidates"] = multi_artist_candidates
+    st.session_state["title_feat_fixes"] = title_feat_fixes
     st.session_state["duplicate_plan"] = duplicate_plan
     st.session_state["drm_plan"] = drm_plan
 
@@ -366,8 +370,9 @@ def _render_normalize_tool():
 
     feat_changes = st.session_state.get("feat_changes", [])
     album_recommendations = st.session_state.get("album_recommendations", [])
+    title_feat_fixes = st.session_state.get("title_feat_fixes", [])
 
-    if not feat_changes and not album_recommendations:
+    if not feat_changes and not album_recommendations and not title_feat_fixes:
         st.success("✅ Nothing to normalize — no featuring credits or duplicate albums found.")
         return
 
@@ -442,7 +447,44 @@ def _render_normalize_tool():
         if selected_album_recommendations
         else []
     )
-    plan = build_plan(feat_changes + album_changes)
+
+    selected_title_feat_fixes = []
+
+    if title_feat_fixes:
+        st.write("**Featured-credit spelling in titles**")
+        st.caption(
+            "Catches a featured-artist credit inside a song's Title that's "
+            "spelled differently than that artist's current Artist tag "
+            "elsewhere in your library — the song's own Artist tag isn't "
+            "touched, just the credited name inside the title."
+        )
+
+        for i, change in enumerate(title_feat_fixes):
+            needs_review = change["confidence"] < DEDUP_REVIEW_THRESHOLD
+            label = (
+                f'{Path(change["file"]).name} — {change["confidence"]}% confidence '
+                f'({change["reason"]})'
+            )
+
+            with st.expander(label, expanded=needs_review):
+                if needs_review:
+                    st.caption(
+                        "⚠️ Lower-confidence match — double-check this is really "
+                        "the same artist before including it."
+                    )
+
+                st.write(f'"{change["current_title"]}" → "{change["new_title"]}"')
+
+                include = st.checkbox(
+                    "Include this fix",
+                    value=not needs_review,
+                    key=f"title_feat_fix_include_{i}",
+                )
+
+            if include:
+                selected_title_feat_fixes.append(change)
+
+    plan = build_plan(feat_changes + album_changes + selected_title_feat_fixes)
 
     st.warning(f"{plan['total_changes']} file(s) will be changed.")
 

@@ -84,7 +84,7 @@ def find_multi_artist_credits(artist_songs):
     return candidates
 
 
-def _join_remaining(names):
+def join_names(names):
     if len(names) == 1:
         return names[0]
 
@@ -99,7 +99,7 @@ def build_feature_choice(group, primary_index):
     candidates = group["candidates"]
     primary_name = candidates[primary_index]
     remaining = candidates[:primary_index] + candidates[primary_index + 1:]
-    featured_text = _join_remaining(remaining)
+    featured_text = join_names(remaining)
 
     changes = []
 
