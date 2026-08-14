@@ -391,6 +391,7 @@ def _run_import(library_path):
     st.session_state["artist_spelling_groups"] = artist_spelling_groups
     st.session_state["duplicate_plan"] = duplicate_plan
     st.session_state["drm_plan"] = drm_plan
+    st.session_state["drm_songs"] = drm_songs
 
     for key in [
         "normalize_apply_results",
@@ -631,6 +632,7 @@ def _render_drm_tool():
     if st.button("Re-scan for DRM Files", key="rescan_drm"):
         with st.spinner("Scanning library..."):
             drm_songs = find_drm_songs(st.session_state["library_path"])
+            st.session_state["drm_songs"] = drm_songs
             st.session_state["drm_plan"] = build_drm_plan(drm_songs, destination_folder=destination)
 
     drm_plan = st.session_state.get(
@@ -1249,7 +1251,10 @@ def _render_csv_export():
     st.write(
         "Exports title, artist, album, and format for every song to a "
         "single CSV file, sorted alphabetically by album — handy for "
-        "browsing your library in a spreadsheet."
+        "browsing your library in a spreadsheet. DRM-protected files are "
+        "included too (they'll show \"m4p\" as the format), since even "
+        "though they can't play in a Tesla, this list is handy for finding "
+        "what to re-download DRM-free."
     )
 
     destination_folder = _folder_picker_input(
@@ -1266,8 +1271,13 @@ def _render_csv_export():
         csv_progress_bar = st.progress(0, text="Starting export...")
 
         artist_songs = st.session_state["report"]["artist_songs"]
+        combined_artist_songs = {artist: list(songs) for artist, songs in artist_songs.items()}
+
+        for song in st.session_state.get("drm_songs", []):
+            combined_artist_songs.setdefault(song.artist, []).append(song)
+
         rows = build_csv_rows(
-            artist_songs,
+            combined_artist_songs,
             on_progress=_make_progress_callback(csv_progress_bar, "Gathering song info", "songs", time.time()),
         )
         destination_path = Path(destination_folder) / filename
@@ -1342,16 +1352,38 @@ with tab_import:
         else:
             _run_import(library_path)
 
-            st.success(
-                "Import complete! Head to the Review tab for a summary, or "
-                "Clean Up Tools to start fixing things."
-            )
+            songs_scanned = st.session_state["report"]["songs_scanned"]
+            drm_count = st.session_state.get("drm_plan", {"total_files": 0})["total_files"]
+
+            message = f"Import complete! Found {songs_scanned} playable song(s)"
+
+            if drm_count:
+                message += (
+                    f" and {drm_count} DRM-protected file(s) — these can't play in "
+                    "a Tesla, but you can review them in Clean Up Tools → DRM Files."
+                )
+            else:
+                message += "."
+
+            message += " Head to the Review tab for a full summary."
+
+            st.success(message)
 
     if st.session_state.get("report") is not None:
-        st.info(
+        songs_scanned = st.session_state["report"]["songs_scanned"]
+        drm_count = st.session_state.get("drm_plan", {"total_files": 0})["total_files"]
+
+        info_text = (
             f"Currently imported: {st.session_state['library_path']} "
-            f"({st.session_state['report']['songs_scanned']} songs)"
+            f"({songs_scanned} playable song(s)"
         )
+
+        if drm_count:
+            info_text += f", {drm_count} DRM-protected"
+
+        info_text += ")"
+
+        st.info(info_text)
 
 with tab_review:
     st.header("Review")
