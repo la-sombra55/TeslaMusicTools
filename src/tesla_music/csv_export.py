@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-CSV_FIELDNAMES = ["artist", "album_artist", "album", "title", "format", "file_path"]
+CSV_FIELDNAMES = ["Title", "Artist", "Album", "Format"]
 
 
 def build_csv_rows(artist_songs, on_progress=None):
@@ -13,12 +13,10 @@ def build_csv_rows(artist_songs, on_progress=None):
         for song in songs:
             rows.append(
                 {
-                    "artist": song.artist,
-                    "album_artist": song.album_artist,
-                    "album": song.album,
-                    "title": song.title,
-                    "format": song.path.suffix.lower().lstrip("."),
-                    "file_path": str(song.path),
+                    "Title": song.title,
+                    "Artist": song.artist,
+                    "Album": song.album,
+                    "Format": song.path.suffix.lower().lstrip("."),
                 }
             )
 
@@ -26,6 +24,8 @@ def build_csv_rows(artist_songs, on_progress=None):
 
             if on_progress is not None:
                 on_progress(completed, total)
+
+    rows.sort(key=lambda row: row["Album"].lower())
 
     return rows
 

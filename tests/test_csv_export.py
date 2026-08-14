@@ -20,12 +20,10 @@ def test_build_csv_rows_includes_expected_fields(make_song):
 
     assert rows == [
         {
-            "artist": "Chris Brown",
-            "album_artist": "Chris Brown",
-            "album": "Fortune",
-            "title": "Turn Up the Music",
-            "format": "mp3",
-            "file_path": "data/input/Chris Brown/Fortune/01 Turn Up.mp3",
+            "Title": "Turn Up the Music",
+            "Artist": "Chris Brown",
+            "Album": "Fortune",
+            "Format": "mp3",
         }
     ]
 
@@ -35,7 +33,7 @@ def test_build_csv_rows_lowercases_format_from_any_case_extension(make_song):
 
     rows = build_csv_rows(artist_songs)
 
-    assert rows[0]["format"] == "m4a"
+    assert rows[0]["Format"] == "m4a"
 
 
 def test_build_csv_rows_covers_every_song_across_every_artist(make_song):
@@ -65,15 +63,38 @@ def test_build_csv_rows_reports_progress(make_song):
     assert progress_calls == [(1, 2), (2, 2)]
 
 
+def test_build_csv_rows_sorts_alphabetically_by_album(make_song):
+    artist_songs = {
+        "Chris Brown": [
+            make_song("a.mp3", artist="Chris Brown", album="X"),
+            make_song("b.mp3", artist="Chris Brown", album="Fortune"),
+        ],
+        "Beyoncé": [make_song("c.mp3", artist="Beyoncé", album="Lemonade")],
+    }
+
+    rows = build_csv_rows(artist_songs)
+
+    assert [row["Album"] for row in rows] == ["Fortune", "Lemonade", "X"]
+
+
+def test_build_csv_rows_sorts_albums_case_insensitively(make_song):
+    artist_songs = {
+        "Artist A": [make_song("a.mp3", artist="Artist A", album="zebra")],
+        "Artist B": [make_song("b.mp3", artist="Artist B", album="Apple")],
+    }
+
+    rows = build_csv_rows(artist_songs)
+
+    assert [row["Album"] for row in rows] == ["Apple", "zebra"]
+
+
 def test_write_csv_export_writes_a_real_readable_csv(tmp_path):
     rows = [
         {
-            "artist": "Chris Brown",
-            "album_artist": "Chris Brown",
-            "album": "Fortune",
-            "title": "Turn Up the Music",
-            "format": "mp3",
-            "file_path": "data/input/Chris Brown/Fortune/01 Turn Up.mp3",
+            "Title": "Turn Up the Music",
+            "Artist": "Chris Brown",
+            "Album": "Fortune",
+            "Format": "mp3",
         }
     ]
     destination = tmp_path / "export.csv"
@@ -105,12 +126,5 @@ def test_write_csv_export_writes_header_even_with_no_rows(tmp_path):
 
     with open(destination, newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
-        assert reader.fieldnames == [
-            "artist",
-            "album_artist",
-            "album",
-            "title",
-            "format",
-            "file_path",
-        ]
+        assert reader.fieldnames == ["Title", "Artist", "Album", "Format"]
         assert list(reader) == []

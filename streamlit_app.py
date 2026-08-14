@@ -1247,9 +1247,9 @@ def _render_artist_folder_export():
 
 def _render_csv_export():
     st.write(
-        "Exports artist, album, title, format, and file path for every "
-        "song to a single CSV file — handy for browsing your library in a "
-        "spreadsheet."
+        "Exports title, artist, album, and format for every song to a "
+        "single CSV file, sorted alphabetically by album — handy for "
+        "browsing your library in a spreadsheet."
     )
 
     destination_folder = _folder_picker_input(
