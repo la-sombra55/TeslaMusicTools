@@ -3,9 +3,15 @@ from pathlib import Path
 from tesla_music import metadata
 
 
+class FakeInfo:
+    def __init__(self, bitrate):
+        self.bitrate = bitrate
+
+
 class FakeAudio:
-    def __init__(self, tags):
+    def __init__(self, tags, info=None):
         self._tags = tags
+        self.info = info
 
     def get(self, key, default):
         return self._tags.get(key, default)
@@ -92,6 +98,34 @@ def test_read_metadata_prefers_easy_keys_over_raw_id3_frames(monkeypatch):
     song = metadata.read_metadata(Path("song.wav"))
 
     assert song.artist == "Easy Artist"
+
+
+def test_read_metadata_converts_bitrate_from_bps_to_kbps(monkeypatch):
+    monkeypatch.setattr(
+        metadata,
+        "File",
+        lambda path, easy=True: FakeAudio({}, info=FakeInfo(bitrate=320000)),
+    )
+
+    song = metadata.read_metadata(Path("song.mp3"))
+
+    assert song.bitrate == 320
+
+
+def test_read_metadata_defaults_bitrate_to_zero_when_info_missing(monkeypatch):
+    monkeypatch.setattr(metadata, "File", lambda path, easy=True: FakeAudio({}, info=None))
+
+    song = metadata.read_metadata(Path("song.mp3"))
+
+    assert song.bitrate == 0
+
+
+def test_read_metadata_defaults_bitrate_to_zero_when_audio_is_none(monkeypatch):
+    monkeypatch.setattr(metadata, "File", lambda path, easy=True: None)
+
+    song = metadata.read_metadata(Path("song.mp3"))
+
+    assert song.bitrate == 0
 
 
 def test_read_metadata_returns_none_when_file_cannot_be_read(monkeypatch):

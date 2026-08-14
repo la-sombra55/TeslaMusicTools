@@ -1,7 +1,7 @@
 import csv
 from pathlib import Path
 
-CSV_FIELDNAMES = ["Title", "Artist", "Album", "Format"]
+CSV_FIELDNAMES = ["Title", "Artist", "Album", "Format", "Bitrate (kbps)"]
 
 
 def build_csv_rows(artist_songs, on_progress=None):
@@ -17,6 +17,7 @@ def build_csv_rows(artist_songs, on_progress=None):
                     "Artist": song.artist,
                     "Album": song.album,
                     "Format": song.path.suffix.lower().lstrip("."),
+                    "Bitrate (kbps)": song.bitrate or "",
                 }
             )
 

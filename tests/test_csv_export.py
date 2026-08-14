@@ -12,6 +12,7 @@ def test_build_csv_rows_includes_expected_fields(make_song):
                 album_artist="Chris Brown",
                 album="Fortune",
                 title="Turn Up the Music",
+                bitrate=320,
             )
         ]
     }
@@ -24,8 +25,17 @@ def test_build_csv_rows_includes_expected_fields(make_song):
             "Artist": "Chris Brown",
             "Album": "Fortune",
             "Format": "mp3",
+            "Bitrate (kbps)": 320,
         }
     ]
+
+
+def test_build_csv_rows_shows_blank_bitrate_when_unknown(make_song):
+    artist_songs = {"Chris Brown": [make_song("a.mp3", artist="Chris Brown", bitrate=0)]}
+
+    rows = build_csv_rows(artist_songs)
+
+    assert rows[0]["Bitrate (kbps)"] == ""
 
 
 def test_build_csv_rows_lowercases_format_from_any_case_extension(make_song):
@@ -95,6 +105,7 @@ def test_write_csv_export_writes_a_real_readable_csv(tmp_path):
             "Artist": "Chris Brown",
             "Album": "Fortune",
             "Format": "mp3",
+            "Bitrate (kbps)": 320,
         }
     ]
     destination = tmp_path / "export.csv"
@@ -108,7 +119,7 @@ def test_write_csv_export_writes_a_real_readable_csv(tmp_path):
         reader = csv.DictReader(file)
         read_rows = list(reader)
 
-    assert read_rows == rows
+    assert read_rows == [{**rows[0], "Bitrate (kbps)": "320"}]
 
 
 def test_write_csv_export_creates_missing_destination_folders(tmp_path):
@@ -126,5 +137,5 @@ def test_write_csv_export_writes_header_even_with_no_rows(tmp_path):
 
     with open(destination, newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
-        assert reader.fieldnames == ["Title", "Artist", "Album", "Format"]
+        assert reader.fieldnames == ["Title", "Artist", "Album", "Format", "Bitrate (kbps)"]
         assert list(reader) == []

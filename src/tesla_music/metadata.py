@@ -46,5 +46,13 @@ def read_metadata(song_path: Path):
     song.album_artist = _read_tag(audio, "albumartist", "Unknown")
     song.album = _read_tag(audio, "album", "Unknown")
     song.title = _read_tag(audio, "title", "Unknown")
+    song.bitrate = _read_bitrate_kbps(audio)
 
     return song
+
+
+def _read_bitrate_kbps(audio):
+    info = getattr(audio, "info", None)
+    bitrate_bps = getattr(info, "bitrate", 0) if info is not None else 0
+
+    return (bitrate_bps or 0) // 1000

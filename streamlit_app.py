@@ -15,6 +15,11 @@ from tesla_music.artwork import (
     flatten_group,
     search_artwork_alternate,
 )
+from tesla_music.audio_quality import (
+    HIGH_BITRATE_THRESHOLD_KBPS,
+    LOW_BITRATE_THRESHOLD_KBPS,
+    summarize_bitrate_quality,
+)
 from tesla_music.backup import count_backup_files, get_backup_library_path, list_backup_sessions
 from tesla_music.disk_info import format_bytes, get_volume_status
 from tesla_music.drm_files import apply_drm_moves, build_drm_plan, find_drm_songs
@@ -1416,6 +1421,28 @@ with tab_review:
                     " — DRM-protected, can't play in a Tesla" if extension == "m4p" else ""
                 )
                 st.write(f"**{extension.upper()}**: {count} songs{note}")
+
+        st.subheader("Audio quality")
+
+        quality_summary = summarize_bitrate_quality(report["artist_songs"])
+        quality_counts = quality_summary["counts"]
+
+        quality_cols = st.columns(3)
+        quality_cols[0].metric(
+            f"Low quality (<{LOW_BITRATE_THRESHOLD_KBPS}kbps)", quality_counts["low"]
+        )
+        quality_cols[1].metric("Standard quality", quality_counts["standard"])
+        quality_cols[2].metric(
+            f"High quality (>{HIGH_BITRATE_THRESHOLD_KBPS}kbps)", quality_counts["high"]
+        )
+
+        if quality_counts["unknown"]:
+            st.caption(f"{quality_counts['unknown']} song(s) had no readable bitrate.")
+
+        if quality_counts["low"]:
+            with st.expander(f"Show low-quality songs ({quality_counts['low']})"):
+                for song in quality_summary["low_quality_songs"]:
+                    st.caption(f"{song.artist} — {song.title} ({song.bitrate} kbps)")
 
         st.subheader("What the tool found")
 

@@ -10,6 +10,7 @@ class Song:
     album_artist: str = "Unknown"
     album: str = "Unknown"
     title: str = "Unknown"
+    bitrate: int = 0
 
     def __str__(self):
         return (
