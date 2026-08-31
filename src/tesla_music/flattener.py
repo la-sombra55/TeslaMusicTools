@@ -51,10 +51,16 @@ def build_artist_folder_plan(artist_songs, destination_folder):
     }
 
 
-def build_playlist_export_plan(songs, playlist_name, destination_folder):
+def build_playlist_export_plan(songs, playlist_name, destination_folder, organize_by=None):
     """
     Like build_artist_folder_plan, but for a single named playlist folder
     instead of one folder per artist.
+
+    organize_by: None (keep original filenames), "artist", or "album" --
+    prefixes each exported filename with that field. A car's USB browser
+    lists files alphabetically by filename, not by tag, so a playlist
+    folder only visibly groups by artist/album in the car if the filename
+    itself carries that information.
     """
     playlist_folder = Path(destination_folder) / sanitize_folder_name(playlist_name)
 
@@ -63,14 +69,20 @@ def build_playlist_export_plan(songs, playlist_name, destination_folder):
 
     for song in songs:
         file_path = Path(song.path)
-        stem = file_path.stem
         extension = file_path.suffix
 
-        candidate = file_path.name
+        if organize_by == "artist":
+            base_name = f"{sanitize_folder_name(song.artist)} - {file_path.stem}"
+        elif organize_by == "album":
+            base_name = f"{sanitize_folder_name(song.album)} - {file_path.stem}"
+        else:
+            base_name = file_path.stem
+
+        candidate = f"{base_name}{extension}"
         attempt = 2
 
         while candidate in used_names:
-            candidate = f"{stem} ({attempt}){extension}"
+            candidate = f"{base_name} ({attempt}){extension}"
             attempt += 1
 
         used_names.add(candidate)

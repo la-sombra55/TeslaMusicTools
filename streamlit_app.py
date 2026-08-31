@@ -1569,6 +1569,22 @@ def _render_saved_playlists():
         "of them."
     )
 
+    organize_by_choice = st.segmented_control(
+        "Organize exported files by",
+        ["Artist", "Album", "Original filenames"],
+        default="Artist",
+        required=True,
+        key="playlist_organize_by",
+    )
+    st.caption(
+        "Your car's USB browser lists files alphabetically by filename, not "
+        "by tag — this prefixes each exported song so they group together "
+        "when you browse the playlist folder in the car."
+    )
+    organize_by = {"Artist": "artist", "Album": "album", "Original filenames": None}[
+        organize_by_choice
+    ]
+
     for i, playlist in enumerate(saved_playlists):
         found_songs, missing_paths = resolve_playlist_songs(playlist, artist_songs)
         plural = "s" if len(found_songs) != 1 else ""
@@ -1596,7 +1612,7 @@ def _render_saved_playlists():
 
             if st.button("Preview Export", key=f"playlist_preview_{i}"):
                 st.session_state[plan_key] = build_playlist_export_plan(
-                    found_songs, playlist["name"], destination
+                    found_songs, playlist["name"], destination, organize_by=organize_by
                 )
 
             export_plan = st.session_state.get(plan_key)

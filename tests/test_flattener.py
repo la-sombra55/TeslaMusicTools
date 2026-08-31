@@ -131,6 +131,52 @@ def test_build_playlist_export_plan_sanitizes_slashes_in_playlist_name(make_song
     assert plan["destination_folder"] == "out/Rock-Pop Mix"
 
 
+def test_build_playlist_export_plan_prefixes_filenames_by_artist(make_song):
+    songs = [
+        make_song("a.mp3", artist="Lupe Fiasco", title="Kick Push"),
+        make_song("b.mp3", artist="Kanye West", title="Touch the Sky"),
+    ]
+
+    plan = build_playlist_export_plan(songs, "Road Trip", "out", organize_by="artist")
+
+    destinations = {c["destination"] for c in plan["changes"]}
+    assert destinations == {
+        "out/Road Trip/Lupe Fiasco - a.mp3",
+        "out/Road Trip/Kanye West - b.mp3",
+    }
+
+
+def test_build_playlist_export_plan_prefixes_filenames_by_album(make_song):
+    songs = [make_song("a.mp3", artist="Lupe Fiasco", album="Food & Liquor")]
+
+    plan = build_playlist_export_plan(songs, "Road Trip", "out", organize_by="album")
+
+    assert plan["changes"][0]["destination"] == "out/Road Trip/Food & Liquor - a.mp3"
+
+
+def test_build_playlist_export_plan_sanitizes_slashes_in_the_organize_by_prefix(make_song):
+    songs = [make_song("a.mp3", artist="Fabolous/P. Diddy/Jagged Edge")]
+
+    plan = build_playlist_export_plan(songs, "Mix", "out", organize_by="artist")
+
+    assert plan["changes"][0]["destination"] == "out/Mix/Fabolous-P. Diddy-Jagged Edge - a.mp3"
+
+
+def test_build_playlist_export_plan_disambiguates_collisions_when_organized(make_song):
+    songs = [
+        make_song("Album A/01 Intro.mp3", artist="Chris Brown"),
+        make_song("Album B/01 Intro.mp3", artist="Chris Brown"),
+    ]
+
+    plan = build_playlist_export_plan(songs, "Mix", "out", organize_by="artist")
+
+    destinations = [c["destination"] for c in plan["changes"]]
+    assert destinations == [
+        "out/Mix/Chris Brown - 01 Intro.mp3",
+        "out/Mix/Chris Brown - 01 Intro (2).mp3",
+    ]
+
+
 def test_build_playlist_export_plan_handles_no_songs():
     assert build_playlist_export_plan([], "Empty", "out") == {
         "total_files": 0,
