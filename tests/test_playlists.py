@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
-from tesla_music import playlists
+from tesla_music import import_history, playlists
+from tesla_music.import_history import record_import_session
 from tesla_music.playlists import (
     delete_playlist,
     find_songs_added_between,
@@ -128,55 +129,64 @@ def test_delete_playlist_returns_false_when_not_found(tmp_path, monkeypatch):
 # --- find_songs_added_between ---
 
 
-def test_find_songs_added_between_includes_a_file_created_in_range(tmp_path, make_song):
-    file_path = tmp_path / "a.mp3"
-    file_path.write_bytes(b"")
-    song = make_song(file_path, artist="Anna Merritt")
+def test_find_songs_added_between_includes_a_song_from_a_session_in_range(tmp_path, monkeypatch, make_song):
+    monkeypatch.setattr(import_history, "IMPORT_HISTORY_FILE", tmp_path / "history.json")
+
+    song = make_song("a.mp3", artist="Anna Merritt")
     artist_songs = {"Anna Merritt": [song]}
 
     now = datetime.now()
+    record_import_session(["a.mp3"], timestamp=now)
+
     matches = find_songs_added_between(artist_songs, now - timedelta(hours=1), now + timedelta(hours=1))
 
     assert matches == [song]
 
 
-def test_find_songs_added_between_excludes_a_file_created_outside_range(tmp_path, make_song):
-    file_path = tmp_path / "a.mp3"
-    file_path.write_bytes(b"")
-    song = make_song(file_path, artist="Anna Merritt")
-    artist_songs = {"Anna Merritt": [song]}
+def test_find_songs_added_between_ignores_the_files_own_filesystem_timestamp(
+    tmp_path, monkeypatch, make_song
+):
+    # Regression test: a file moved or copied in from elsewhere (e.g. an
+    # old purchased track bundled into a fresh batch of CD rips) can carry
+    # a much older creation date than when it actually entered this
+    # library -- that timestamp must never be consulted here.
+    monkeypatch.setattr(import_history, "IMPORT_HISTORY_FILE", tmp_path / "history.json")
 
-    yesterday_start = datetime.now() - timedelta(days=2)
-    yesterday_end = datetime.now() - timedelta(days=1)
-
-    assert find_songs_added_between(artist_songs, yesterday_start, yesterday_end) == []
-
-
-def test_find_songs_added_between_skips_files_that_no_longer_exist(make_song):
-    song = make_song("does/not/exist.mp3", artist="Anna Merritt")
+    old_file = tmp_path / "old_purchase.mp3"
+    old_file.write_bytes(b"")
+    song = make_song(old_file, artist="Anna Merritt")
     artist_songs = {"Anna Merritt": [song]}
 
     now = datetime.now()
+    record_import_session([str(old_file)], timestamp=now)
 
-    assert find_songs_added_between(artist_songs, now - timedelta(hours=1), now + timedelta(hours=1)) == []
+    matches = find_songs_added_between(artist_songs, now - timedelta(hours=1), now + timedelta(hours=1))
+
+    assert matches == [song]
 
 
-def test_find_songs_added_between_only_includes_songs_in_range_not_others(tmp_path, make_song):
-    in_range_path = tmp_path / "a.mp3"
-    in_range_path.write_bytes(b"")
-    in_range_song = make_song(in_range_path, artist="Anna Merritt")
+def test_find_songs_added_between_excludes_a_session_outside_range(tmp_path, monkeypatch, make_song):
+    monkeypatch.setattr(import_history, "IMPORT_HISTORY_FILE", tmp_path / "history.json")
 
-    out_of_range_song = make_song("does/not/exist.mp3", artist="Someone Else")
+    song = make_song("a.mp3", artist="Anna Merritt")
+    artist_songs = {"Anna Merritt": [song]}
 
-    artist_songs = {
-        "Anna Merritt": [in_range_song],
-        "Someone Else": [out_of_range_song],
-    }
+    old_timestamp = datetime.now() - timedelta(days=10)
+    record_import_session(["a.mp3"], timestamp=old_timestamp)
 
     now = datetime.now()
     matches = find_songs_added_between(artist_songs, now - timedelta(hours=1), now + timedelta(hours=1))
 
-    assert matches == [in_range_song]
+    assert matches == []
+
+
+def test_find_songs_added_between_handles_no_import_history(tmp_path, monkeypatch, make_song):
+    monkeypatch.setattr(import_history, "IMPORT_HISTORY_FILE", tmp_path / "history.json")
+
+    artist_songs = {"Anna Merritt": [make_song("a.mp3", artist="Anna Merritt")]}
+    now = datetime.now()
+
+    assert find_songs_added_between(artist_songs, now - timedelta(hours=1), now) == []
 
 
 # --- resolve_playlist_songs ---

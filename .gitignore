@@ -227,3 +227,11 @@ data/output/
 # Metadata backups
 
 data/backups/
+
+# Saved playlists (song names, artists, and personal file paths)
+
+data/playlists/
+
+# Import history log (personal file paths from every import)
+
+data/import_history.json

@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from tesla_music.flattener import sanitize_folder_name
+from tesla_music.import_history import find_songs_from_sessions_between
 
 PLAYLISTS_FOLDER = Path("data/playlists")
 
@@ -39,28 +40,21 @@ def search_library(artist_songs, query, fields=("artist", "title")):
 
 def find_songs_added_between(artist_songs, start, end):
     """
-    Finds songs whose file was created on disk within [start, end]
-    (datetime objects, inclusive). Uses the file's creation time
-    (birthtime), not modification time -- a later tag edit through this
-    tool updates mtime on save, which would otherwise make an old song look
-    like it was "added" the moment you last normalized its tags. birthtime
-    doesn't change on an in-place edit, only on the file's original copy.
-    macOS-only (birthtime isn't exposed on all platforms); songs whose
-    creation time can't be read are skipped rather than guessed at.
+    Finds songs that were part of an Import Library run whose timestamp
+    falls within [start, end] (datetime objects, inclusive). Uses the
+    tool's own import history rather than each file's filesystem
+    timestamps -- a file moved or copied in from elsewhere (e.g. an old
+    purchased track bundled into a fresh batch of CD rips) can keep a much
+    older creation date than when it actually entered this library, which
+    made filesystem timestamps unreliable for "when was this added here."
     """
-    start_ts = start.timestamp()
-    end_ts = end.timestamp()
+    matching_paths = find_songs_from_sessions_between(start, end)
 
     matches = []
 
     for songs in artist_songs.values():
         for song in songs:
-            try:
-                created = song.path.stat().st_birthtime
-            except (OSError, AttributeError):
-                continue
-
-            if start_ts <= created <= end_ts:
+            if str(song.path) in matching_paths:
                 matches.append(song)
 
     return matches

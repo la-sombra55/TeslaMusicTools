@@ -41,6 +41,7 @@ from tesla_music.flattener import (
     build_flatten_plan,
     build_playlist_export_plan,
 )
+from tesla_music.import_history import record_import_session
 from tesla_music.multi_artist import (
     SEPARATOR_AMPERSAND,
     SEPARATOR_SLASH,
@@ -352,6 +353,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "album_dedup_include_",
     "title_feat_group_include_",
     "title_feat_preferred_",
+    "playlist_export_plan_",
 )
 
 
@@ -399,6 +401,9 @@ def _run_import(library_path):
 
     drm_songs = find_drm_songs(library_path)
     drm_plan = build_drm_plan(drm_songs)
+
+    all_paths = [song.path for songs in report["artist_songs"].values() for song in songs]
+    record_import_session(all_paths)
 
     scan_progress_bar.empty()
 
@@ -1552,6 +1557,18 @@ def _render_saved_playlists():
 
     artist_songs = st.session_state["report"]["artist_songs"]
 
+    destination = _folder_picker_input(
+        "Destination folder for exports",
+        key="playlist_shared_destination",
+        default_value="data/output/playlists",
+        prompt="Select a destination folder",
+    )
+    st.caption(
+        "Shared by every playlist below — each one exports into its own "
+        "subfolder here, so it's safe to reuse the same destination for all "
+        "of them."
+    )
+
     for i, playlist in enumerate(saved_playlists):
         found_songs, missing_paths = resolve_playlist_songs(playlist, artist_songs)
         plural = "s" if len(found_songs) != 1 else ""
@@ -1566,16 +1583,14 @@ def _render_saved_playlists():
                     "was saved)."
                 )
 
+            if not found_songs:
+                st.write("Nothing left in this playlist to export.")
+                _render_playlist_delete_button(i, playlist["name"])
+                continue
+
             with st.expander("Show songs"):
                 for song in found_songs:
                     st.caption(f"{song.artist} — {song.title}")
-
-            destination = _folder_picker_input(
-                "Destination folder",
-                key=f"playlist_destination_{i}",
-                default_value="data/output/playlists",
-                prompt="Select a destination folder",
-            )
 
             plan_key = f"playlist_export_plan_{i}"
 
@@ -1624,10 +1639,31 @@ def _render_saved_playlists():
                     st.success(message)
                     _render_failure_details(results, "source", verb="copied")
 
-            if st.button("Delete Playlist", key=f"playlist_delete_{i}"):
-                delete_playlist(playlist["name"])
-                st.session_state.pop(plan_key, None)
-                st.rerun()
+            _render_playlist_delete_button(i, playlist["name"])
+
+
+def _render_playlist_delete_button(i, playlist_name):
+    confirm_delete = st.checkbox(
+        "Yes, delete this playlist (the songs themselves aren't touched)",
+        key=f"playlist_delete_confirm_{i}",
+    )
+
+    if st.button(
+        "Delete Playlist", disabled=not confirm_delete, key=f"playlist_delete_{i}"
+    ):
+        delete_playlist(playlist_name)
+
+        # Deleting shifts every later playlist's index down by one, so any
+        # stale confirm-checkbox or cached export plan at those indices has
+        # to go too -- otherwise a checked "confirm" box could carry over
+        # onto a completely different playlist that now occupies that slot.
+        for key in list(st.session_state.keys()):
+            if key.startswith("playlist_delete_confirm_") or key.startswith(
+                "playlist_export_plan_"
+            ):
+                del st.session_state[key]
+
+        st.rerun()
 
 
 def _render_playlist_export():
