@@ -168,14 +168,41 @@ def test_read_metadata_falls_back_to_native_aiff_chunks_when_no_id3(tmp_path):
     assert song.album == "Unknown"  # no album chunk exists in the AIFF spec
 
 
-def test_read_metadata_stays_unknown_for_a_fully_untagged_aiff(tmp_path):
-    path = tmp_path / "song.aiff"
+def test_read_metadata_falls_back_to_filename_for_a_fully_untagged_aiff(tmp_path):
+    # No ID3, no native AIFF chunks -- the only signal left is the filename
+    # itself. Real-world case: CD rips with a "## Title.aiff" naming
+    # convention and zero embedded metadata anywhere.
+    path = tmp_path / "10 Armistice.aiff"
     _write_aiff(path)
 
     song = metadata.read_metadata(path)
 
-    assert song.title == "Unknown"
-    assert song.artist == "Unknown"
+    assert song.title == "Armistice"
+    assert song.artist == "Unknown"  # no artist info exists anywhere to infer this from
+
+
+def test_title_from_filename_strips_various_track_number_separators(tmp_path, monkeypatch):
+    monkeypatch.setattr(metadata, "File", lambda p, easy=True: FakeAudio({}))
+
+    for filename, expected_title in [
+        ("10 Armistice.mp3", "Armistice"),
+        ("01. Armistice.mp3", "Armistice"),
+        ("01-Armistice.mp3", "Armistice"),
+        ("01_Armistice.mp3", "Armistice"),
+        ("Armistice.mp3", "Armistice"),  # no leading track number at all
+    ]:
+        song = metadata.read_metadata(tmp_path / filename)
+        assert song.title == expected_title, filename
+
+
+def test_read_metadata_does_not_use_filename_when_a_real_title_is_tagged(monkeypatch):
+    monkeypatch.setattr(
+        metadata, "File", lambda p, easy=True: FakeAudio({"title": ["Real Title"]})
+    )
+
+    song = metadata.read_metadata(Path("10 Different Filename.mp3"))
+
+    assert song.title == "Real Title"
 
 
 def test_read_metadata_prefers_id3_over_native_aiff_chunks(tmp_path, monkeypatch):

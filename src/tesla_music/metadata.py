@@ -1,9 +1,18 @@
+import re
 from pathlib import Path
 
 from mutagen import File
 from mutagen.aiff import AIFFFile
 
 from tesla_music.models import Song
+
+# Last-resort fallback for files with no metadata anywhere (no tags, no
+# native chunks) -- strips a leading track number like "10 " or "10. " off
+# the filename so at least the title is a real, distinguishing value
+# instead of every untagged file colliding on the shared "Unknown"
+# placeholder (which breaks anything that groups songs by title, like
+# artwork lookup and duplicate detection).
+FILENAME_TRACK_NUMBER_PATTERN = re.compile(r"^\d+[\s._-]+")
 
 AIFF_EXTENSIONS = (".aiff", ".aif")
 
@@ -73,7 +82,19 @@ def read_metadata(song_path: Path):
         if song.artist == "Unknown" and native_tags.get("artist"):
             song.artist = native_tags["artist"]
 
+    if song.title == "Unknown":
+        title_from_filename = _title_from_filename(song_path)
+
+        if title_from_filename:
+            song.title = title_from_filename
+
     return song
+
+
+def _title_from_filename(song_path):
+    title = FILENAME_TRACK_NUMBER_PATTERN.sub("", song_path.stem).strip()
+
+    return title or None
 
 
 def _read_native_aiff_tags(song_path):
