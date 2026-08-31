@@ -51,7 +51,10 @@ def find_duplicate_songs(artist_songs):
     Finds likely-duplicate songs within each artist's own catalog: same
     normalized title, and duration within a couple seconds of each other.
     Scoped per artist so two unrelated songs that happen to share a generic
-    title (e.g. "Intro") by different artists are never compared.
+    title (e.g. "Intro") by different artists are never compared. Songs
+    with an unreadable ("Unknown") title are skipped entirely -- matching
+    on a placeholder value would treat every untagged file in an artist's
+    catalog as a potential duplicate of every other one.
     """
     duplicate_groups = []
 
@@ -59,6 +62,9 @@ def find_duplicate_songs(artist_songs):
         titles = defaultdict(list)
 
         for song in songs:
+            if song.title.strip().lower() == "unknown":
+                continue
+
             titles[normalize(song.title)].append((song, _get_duration(song.path)))
 
         for entries in titles.values():

@@ -44,6 +44,23 @@ def test_does_not_group_same_title_when_duration_differs_a_lot(make_song, monkey
     assert find_duplicate_songs({"2Pac": songs}) == []
 
 
+def test_does_not_group_songs_with_unknown_titles_as_duplicates_of_each_other(
+    make_song, monkeypatch
+):
+    # Regression test: untagged AIFF rips all reporting title "Unknown" were
+    # getting flagged as duplicates of each other whenever their durations
+    # happened to land within the tolerance window, even though they were
+    # completely different songs.
+    songs = [
+        make_song("a.aiff", title="Unknown"),
+        make_song("b.aiff", title="Unknown"),
+        make_song("c.aiff", title="Unknown"),
+    ]
+    _durations(monkeypatch, {"a.aiff": 200.0, "b.aiff": 201.0, "c.aiff": 202.0})
+
+    assert find_duplicate_songs({"Anna Merritt": songs}) == []
+
+
 def test_does_not_group_across_different_artists(make_song, monkeypatch):
     songs_a = [make_song("a.m4a", title="Intro")]
     songs_b = [make_song("b.m4a", title="Intro")]
