@@ -1,4 +1,9 @@
-from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
+from tesla_music.flattener import (
+    apply_flatten,
+    build_artist_folder_plan,
+    build_flatten_plan,
+    build_playlist_export_plan,
+)
 
 
 def test_build_flatten_plan_keeps_original_filename():
@@ -85,6 +90,51 @@ def test_build_artist_folder_plan_handles_no_songs():
     assert build_artist_folder_plan({}, "out") == {
         "total_files": 0,
         "destination_folder": "out",
+        "changes": [],
+    }
+
+
+def test_build_playlist_export_plan_puts_songs_under_the_playlist_name(make_song):
+    songs = [
+        make_song("Lupe Fiasco/Food & Liquor/Kick Push.mp3", artist="Lupe Fiasco"),
+        make_song("Kanye West/Late Registration/Touch the Sky.mp3", artist="Kanye West"),
+    ]
+
+    plan = build_playlist_export_plan(songs, "Road Trip", "data/output/playlists")
+
+    assert plan["total_files"] == 2
+    assert plan["destination_folder"] == "data/output/playlists/Road Trip"
+    destinations = {c["destination"] for c in plan["changes"]}
+    assert destinations == {
+        "data/output/playlists/Road Trip/Kick Push.mp3",
+        "data/output/playlists/Road Trip/Touch the Sky.mp3",
+    }
+
+
+def test_build_playlist_export_plan_disambiguates_name_collisions(make_song):
+    songs = [
+        make_song("Album A/01 Intro.mp3"),
+        make_song("Album B/01 Intro.mp3"),
+    ]
+
+    plan = build_playlist_export_plan(songs, "Mix", "out")
+
+    destinations = [c["destination"] for c in plan["changes"]]
+    assert destinations == ["out/Mix/01 Intro.mp3", "out/Mix/01 Intro (2).mp3"]
+
+
+def test_build_playlist_export_plan_sanitizes_slashes_in_playlist_name(make_song):
+    songs = [make_song("a.mp3")]
+
+    plan = build_playlist_export_plan(songs, "Rock/Pop Mix", "out")
+
+    assert plan["destination_folder"] == "out/Rock-Pop Mix"
+
+
+def test_build_playlist_export_plan_handles_no_songs():
+    assert build_playlist_export_plan([], "Empty", "out") == {
+        "total_files": 0,
+        "destination_folder": "out/Empty",
         "changes": [],
     }
 

@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 
 
-def _sanitize_folder_name(name):
+def sanitize_folder_name(name):
     for char in ("/", "\\"):
         name = name.replace(char, "-")
 
@@ -20,7 +20,7 @@ def build_artist_folder_plan(artist_songs, destination_folder):
     changes = []
 
     for artist, songs in artist_songs.items():
-        artist_folder = destination_folder / _sanitize_folder_name(artist)
+        artist_folder = destination_folder / sanitize_folder_name(artist)
         used_names = set()
 
         for song in songs:
@@ -47,6 +47,44 @@ def build_artist_folder_plan(artist_songs, destination_folder):
     return {
         "total_files": len(changes),
         "destination_folder": str(destination_folder),
+        "changes": changes,
+    }
+
+
+def build_playlist_export_plan(songs, playlist_name, destination_folder):
+    """
+    Like build_artist_folder_plan, but for a single named playlist folder
+    instead of one folder per artist.
+    """
+    playlist_folder = Path(destination_folder) / sanitize_folder_name(playlist_name)
+
+    changes = []
+    used_names = set()
+
+    for song in songs:
+        file_path = Path(song.path)
+        stem = file_path.stem
+        extension = file_path.suffix
+
+        candidate = file_path.name
+        attempt = 2
+
+        while candidate in used_names:
+            candidate = f"{stem} ({attempt}){extension}"
+            attempt += 1
+
+        used_names.add(candidate)
+
+        changes.append(
+            {
+                "source": str(file_path),
+                "destination": str(playlist_folder / candidate),
+            }
+        )
+
+    return {
+        "total_files": len(changes),
+        "destination_folder": str(playlist_folder),
         "changes": changes,
     }
 

@@ -35,7 +35,12 @@ from tesla_music.feat_title_consistency import (
     build_artist_spelling_changes,
     find_artist_spelling_groups,
 )
-from tesla_music.flattener import apply_flatten, build_artist_folder_plan, build_flatten_plan
+from tesla_music.flattener import (
+    apply_flatten,
+    build_artist_folder_plan,
+    build_flatten_plan,
+    build_playlist_export_plan,
+)
 from tesla_music.multi_artist import (
     SEPARATOR_AMPERSAND,
     SEPARATOR_SLASH,
@@ -44,6 +49,13 @@ from tesla_music.multi_artist import (
     find_multi_artist_credits,
 )
 from tesla_music.planner import build_album_change_plan, build_change_plan, build_plan
+from tesla_music.playlists import (
+    delete_playlist,
+    list_playlists,
+    resolve_playlist_songs,
+    save_playlist,
+    search_library,
+)
 from tesla_music.recommendations import build_album_recommendations, build_recommendations
 from tesla_music.restore import apply_restore, build_restore_plan
 from tesla_music.scanner import scan_library
@@ -1301,10 +1313,252 @@ def _render_csv_export():
         )
 
 
+def _render_smart_playlist_builder():
+    st.write(
+        "Type an artist (or any text) and every song where it appears in "
+        "the Artist field *or* the Title field gets included — catching "
+        "both their own tracks and any songs where they're featured."
+    )
+
+    query = st.text_input("Search for", key="smart_playlist_query")
+    artist_songs = st.session_state["report"]["artist_songs"]
+    matches = search_library(artist_songs, query) if query else []
+
+    if query:
+        plural = "s" if len(matches) != 1 else ""
+        st.info(f'{len(matches)} song{plural} match "{query}"')
+
+        with st.expander("Show matches", expanded=bool(matches)):
+            for song in matches:
+                st.caption(f"{song.artist} — {song.title}")
+
+    name = st.text_input("Playlist name", key="smart_playlist_name")
+
+    if st.button(
+        "Save Playlist",
+        type="primary",
+        disabled=not name.strip() or not matches,
+        key="smart_playlist_save",
+    ):
+        save_playlist(name.strip(), matches)
+        st.success(
+            f'Saved "{name.strip()}" with {len(matches)} song(s). Find it under '
+            '"Your Playlists" above to export it.'
+        )
+
+
+def _render_manual_playlist_builder():
+    st.write(
+        "Search your library and add songs one at a time to build a "
+        "playlist by hand — good for mixing multiple artists together, "
+        "like a road trip mix."
+    )
+
+    if "playlist_builder_songs" not in st.session_state:
+        st.session_state["playlist_builder_songs"] = []
+
+    artist_songs = st.session_state["report"]["artist_songs"]
+    added_paths = st.session_state["playlist_builder_songs"]
+    song_by_path = {str(song.path): song for songs in artist_songs.values() for song in songs}
+
+    query = st.text_input("Search for songs to add", key="manual_playlist_query")
+
+    if query:
+        matches = search_library(artist_songs, query)
+        max_results = 30
+
+        if not matches:
+            st.caption("No matches.")
+
+        for song in matches[:max_results]:
+            path = str(song.path)
+            result_col, button_col = st.columns([5, 1])
+
+            with result_col:
+                st.caption(f"{song.artist} — {song.title}")
+
+            with button_col:
+                already_added = path in added_paths
+
+                if st.button(
+                    "Added" if already_added else "Add",
+                    disabled=already_added,
+                    key=f"manual_playlist_add_{path}",
+                ):
+                    added_paths.append(path)
+                    st.rerun()
+
+        if len(matches) > max_results:
+            st.caption(
+                f"{len(matches) - max_results} more match(es) — refine your search to narrow it down."
+            )
+
+    st.divider()
+
+    plural = "s" if len(added_paths) != 1 else ""
+    st.write(f"**{len(added_paths)} song{plural} in this playlist**")
+
+    for path in list(added_paths):
+        song = song_by_path.get(path)
+        label = f"{song.artist} — {song.title}" if song is not None else path
+
+        item_col, remove_col = st.columns([5, 1])
+
+        with item_col:
+            st.caption(label)
+
+        with remove_col:
+            if st.button("Remove", key=f"manual_playlist_remove_{path}"):
+                added_paths.remove(path)
+                st.rerun()
+
+    name = st.text_input("Playlist name", key="manual_playlist_name")
+
+    save_col, clear_col = st.columns([1, 1])
+
+    with save_col:
+        if st.button(
+            "Save Playlist",
+            type="primary",
+            disabled=not name.strip() or not added_paths,
+            key="manual_playlist_save",
+        ):
+            songs_to_save = [song_by_path[path] for path in added_paths if path in song_by_path]
+            save_playlist(name.strip(), songs_to_save)
+            st.session_state["playlist_builder_songs"] = []
+
+            st.success(
+                f'Saved "{name.strip()}" with {len(songs_to_save)} song(s). Find it under '
+                '"Your Playlists" above to export it.'
+            )
+            st.rerun()
+
+    with clear_col:
+        if st.button("Start Over", key="manual_playlist_clear"):
+            st.session_state["playlist_builder_songs"] = []
+            st.rerun()
+
+
+def _render_saved_playlists():
+    saved_playlists = list_playlists()
+
+    if not saved_playlists:
+        st.info(
+            "No playlists saved yet — build one with \"New Smart Playlist\" or "
+            "\"New Manual Playlist\" above."
+        )
+        return
+
+    artist_songs = st.session_state["report"]["artist_songs"]
+
+    for i, playlist in enumerate(saved_playlists):
+        found_songs, missing_paths = resolve_playlist_songs(playlist, artist_songs)
+        plural = "s" if len(found_songs) != 1 else ""
+        label = f'{playlist["name"]} — {len(found_songs)} song{plural}'
+
+        with st.expander(label):
+            if missing_paths:
+                missing_plural = "s" if len(missing_paths) != 1 else ""
+                st.caption(
+                    f"⚠️ {len(missing_paths)} song{missing_plural} in this playlist weren't "
+                    "found in your current library (moved, renamed, or deleted since it "
+                    "was saved)."
+                )
+
+            with st.expander("Show songs"):
+                for song in found_songs:
+                    st.caption(f"{song.artist} — {song.title}")
+
+            destination = _folder_picker_input(
+                "Destination folder",
+                key=f"playlist_destination_{i}",
+                default_value="data/output/playlists",
+                prompt="Select a destination folder",
+            )
+
+            plan_key = f"playlist_export_plan_{i}"
+
+            if st.button("Preview Export", key=f"playlist_preview_{i}"):
+                st.session_state[plan_key] = build_playlist_export_plan(
+                    found_songs, playlist["name"], destination
+                )
+
+            export_plan = st.session_state.get(plan_key)
+
+            if export_plan is None:
+                _render_volume_storage_info(destination)
+            else:
+                st.info(
+                    f"{export_plan['total_files']} file(s) will be copied to "
+                    f"{export_plan['destination_folder']}"
+                )
+
+                needed_bytes = sum(
+                    Path(change["source"]).stat().st_size for change in export_plan["changes"]
+                )
+                _render_volume_storage_info(
+                    export_plan["destination_folder"], needed_bytes=needed_bytes
+                )
+
+                if st.button("Copy Files", type="primary", key=f"playlist_copy_{i}"):
+                    copy_progress_bar = st.progress(0, text="Starting export...")
+
+                    results = apply_flatten(
+                        export_plan,
+                        dry_run=False,
+                        on_progress=_make_progress_callback(
+                            copy_progress_bar, "Copying files", "files", time.time()
+                        ),
+                    )
+
+                    copy_progress_bar.empty()
+
+                    copied = sum(1 for r in results if r["status"] == "copied")
+                    failed = sum(1 for r in results if r["status"] == "failed")
+
+                    message = f"Copied {copied} file(s)."
+                    if failed:
+                        message += f" {failed} failed."
+
+                    st.success(message)
+                    _render_failure_details(results, "source", verb="copied")
+
+            if st.button("Delete Playlist", key=f"playlist_delete_{i}"):
+                delete_playlist(playlist["name"])
+                st.session_state.pop(plan_key, None)
+                st.rerun()
+
+
+def _render_playlist_export():
+    st.write(
+        "Build a named playlist from your library, then export it as its "
+        "own folder — shuffle it once you're in the car, so song order "
+        "doesn't matter here."
+    )
+
+    playlist_mode = st.segmented_control(
+        "Playlist option",
+        ["Your Playlists", "New Smart Playlist", "New Manual Playlist"],
+        default="Your Playlists",
+        required=True,
+        key="playlist_export_mode",
+    )
+
+    st.divider()
+
+    if playlist_mode == "Your Playlists":
+        _render_saved_playlists()
+    elif playlist_mode == "New Smart Playlist":
+        _render_smart_playlist_builder()
+    else:
+        _render_manual_playlist_builder()
+
+
 EXPORT_MODES = {
     "Flattened files": _render_flatten_export,
     "Artist folders": _render_artist_folder_export,
     "CSV file info": _render_csv_export,
+    "Playlists": _render_playlist_export,
 }
 
 
