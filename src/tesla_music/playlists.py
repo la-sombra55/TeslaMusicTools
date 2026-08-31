@@ -37,6 +37,35 @@ def search_library(artist_songs, query, fields=("artist", "title")):
     return matches
 
 
+def find_songs_added_between(artist_songs, start, end):
+    """
+    Finds songs whose file was created on disk within [start, end]
+    (datetime objects, inclusive). Uses the file's creation time
+    (birthtime), not modification time -- a later tag edit through this
+    tool updates mtime on save, which would otherwise make an old song look
+    like it was "added" the moment you last normalized its tags. birthtime
+    doesn't change on an in-place edit, only on the file's original copy.
+    macOS-only (birthtime isn't exposed on all platforms); songs whose
+    creation time can't be read are skipped rather than guessed at.
+    """
+    start_ts = start.timestamp()
+    end_ts = end.timestamp()
+
+    matches = []
+
+    for songs in artist_songs.values():
+        for song in songs:
+            try:
+                created = song.path.stat().st_birthtime
+            except (OSError, AttributeError):
+                continue
+
+            if start_ts <= created <= end_ts:
+                matches.append(song)
+
+    return matches
+
+
 def save_playlist(name, songs):
     PLAYLISTS_FOLDER.mkdir(parents=True, exist_ok=True)
 

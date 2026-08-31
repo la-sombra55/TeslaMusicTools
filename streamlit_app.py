@@ -1,7 +1,7 @@
 import subprocess
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import streamlit as st
@@ -51,6 +51,7 @@ from tesla_music.multi_artist import (
 from tesla_music.planner import build_album_change_plan, build_change_plan, build_plan
 from tesla_music.playlists import (
     delete_playlist,
+    find_songs_added_between,
     list_playlists,
     resolve_playlist_songs,
     save_playlist,
@@ -1476,6 +1477,69 @@ def _render_manual_playlist_builder():
             st.rerun()
 
 
+def _render_date_playlist_builder():
+    st.write(
+        "Build a playlist from everything added to your library within a "
+        "date range — handy right after a big import session, like all "
+        "the CDs from a friend in one sitting."
+    )
+
+    preset = st.segmented_control(
+        "Range",
+        ["Today", "Last 24 hours", "Last 7 days", "Custom range"],
+        default="Today",
+        required=True,
+        key="date_playlist_preset",
+    )
+
+    now = datetime.now()
+
+    if preset == "Today":
+        start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        end = now
+    elif preset == "Last 24 hours":
+        start = now - timedelta(hours=24)
+        end = now
+    elif preset == "Last 7 days":
+        start = now - timedelta(days=7)
+        end = now
+    else:
+        range_col1, range_col2 = st.columns(2)
+
+        with range_col1:
+            start_date = st.date_input("From", value=now.date(), key="date_playlist_start")
+
+        with range_col2:
+            end_date = st.date_input("To", value=now.date(), key="date_playlist_end")
+
+        start = datetime.combine(start_date, datetime.min.time())
+        end = datetime.combine(end_date, datetime.max.time())
+
+    artist_songs = st.session_state["report"]["artist_songs"]
+    matches = find_songs_added_between(artist_songs, start, end)
+
+    plural = "s" if len(matches) != 1 else ""
+    st.info(f"{len(matches)} song{plural} added in this range")
+
+    with st.expander("Show matches", expanded=bool(matches)):
+        for song in matches:
+            st.caption(f"{song.artist} — {song.title}")
+
+    name = st.text_input("Playlist name", key="date_playlist_name")
+
+    if st.button(
+        "Save Playlist",
+        type="primary",
+        disabled=not name.strip() or not matches,
+        key="date_playlist_save",
+    ):
+        save_playlist(name.strip(), matches)
+        st.success(
+            f'Saved "{name.strip()}" with {len(matches)} song(s). Find it under '
+            '"Your Playlists" above to export it.'
+        )
+
+
 def _render_saved_playlists():
     saved_playlists = list_playlists()
 
@@ -1575,7 +1639,7 @@ def _render_playlist_export():
 
     playlist_mode = st.segmented_control(
         "Playlist option",
-        ["Your Playlists", "New Smart Playlist", "New Manual Playlist"],
+        ["Your Playlists", "New Smart Playlist", "New Manual Playlist", "New Playlist by Date"],
         default="Your Playlists",
         required=True,
         key="playlist_export_mode",
@@ -1587,8 +1651,10 @@ def _render_playlist_export():
         _render_saved_playlists()
     elif playlist_mode == "New Smart Playlist":
         _render_smart_playlist_builder()
-    else:
+    elif playlist_mode == "New Manual Playlist":
         _render_manual_playlist_builder()
+    else:
+        _render_date_playlist_builder()
 
 
 EXPORT_MODES = {

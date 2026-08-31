@@ -1,6 +1,9 @@
+from datetime import datetime, timedelta
+
 from tesla_music import playlists
 from tesla_music.playlists import (
     delete_playlist,
+    find_songs_added_between,
     list_playlists,
     resolve_playlist_songs,
     save_playlist,
@@ -120,6 +123,60 @@ def test_delete_playlist_returns_false_when_not_found(tmp_path, monkeypatch):
     monkeypatch.setattr(playlists, "PLAYLISTS_FOLDER", tmp_path / "playlists")
 
     assert delete_playlist("Does Not Exist") is False
+
+
+# --- find_songs_added_between ---
+
+
+def test_find_songs_added_between_includes_a_file_created_in_range(tmp_path, make_song):
+    file_path = tmp_path / "a.mp3"
+    file_path.write_bytes(b"")
+    song = make_song(file_path, artist="Anna Merritt")
+    artist_songs = {"Anna Merritt": [song]}
+
+    now = datetime.now()
+    matches = find_songs_added_between(artist_songs, now - timedelta(hours=1), now + timedelta(hours=1))
+
+    assert matches == [song]
+
+
+def test_find_songs_added_between_excludes_a_file_created_outside_range(tmp_path, make_song):
+    file_path = tmp_path / "a.mp3"
+    file_path.write_bytes(b"")
+    song = make_song(file_path, artist="Anna Merritt")
+    artist_songs = {"Anna Merritt": [song]}
+
+    yesterday_start = datetime.now() - timedelta(days=2)
+    yesterday_end = datetime.now() - timedelta(days=1)
+
+    assert find_songs_added_between(artist_songs, yesterday_start, yesterday_end) == []
+
+
+def test_find_songs_added_between_skips_files_that_no_longer_exist(make_song):
+    song = make_song("does/not/exist.mp3", artist="Anna Merritt")
+    artist_songs = {"Anna Merritt": [song]}
+
+    now = datetime.now()
+
+    assert find_songs_added_between(artist_songs, now - timedelta(hours=1), now + timedelta(hours=1)) == []
+
+
+def test_find_songs_added_between_only_includes_songs_in_range_not_others(tmp_path, make_song):
+    in_range_path = tmp_path / "a.mp3"
+    in_range_path.write_bytes(b"")
+    in_range_song = make_song(in_range_path, artist="Anna Merritt")
+
+    out_of_range_song = make_song("does/not/exist.mp3", artist="Someone Else")
+
+    artist_songs = {
+        "Anna Merritt": [in_range_song],
+        "Someone Else": [out_of_range_song],
+    }
+
+    now = datetime.now()
+    matches = find_songs_added_between(artist_songs, now - timedelta(hours=1), now + timedelta(hours=1))
+
+    assert matches == [in_range_song]
 
 
 # --- resolve_playlist_songs ---
