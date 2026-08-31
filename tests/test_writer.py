@@ -120,3 +120,26 @@ def test_update_tags_creates_tags_for_wav_when_missing(monkeypatch):
     assert fake_audio.tags is not None
     assert fake_audio.tags.frames["TPE1"].text == ["Chris Brown"]
     assert fake_audio.saved is True
+
+
+@pytest.mark.parametrize("suffix", [".aiff", ".aif"])
+def test_update_tags_sets_id3_frames_for_aiff(monkeypatch, suffix):
+    fake_audio = FakeWaveAudio(tags=FakeWavTags())
+    monkeypatch.setattr(writer, "AIFF", lambda path: fake_audio)
+
+    writer.update_tags(Path(f"song{suffix}"), {"artist": "Chris Brown", "title": "Deuces"})
+
+    assert fake_audio.tags.frames["TPE1"].text == ["Chris Brown"]
+    assert fake_audio.tags.frames["TIT2"].text == ["Deuces"]
+    assert fake_audio.saved is True
+
+
+def test_update_tags_creates_tags_for_aiff_when_missing(monkeypatch):
+    fake_audio = FakeWaveAudio(tags=None)
+    monkeypatch.setattr(writer, "AIFF", lambda path: fake_audio)
+
+    writer.update_tags(Path("song.aiff"), {"artist": "Chris Brown"})
+
+    assert fake_audio.tags is not None
+    assert fake_audio.tags.frames["TPE1"].text == ["Chris Brown"]
+    assert fake_audio.saved is True
