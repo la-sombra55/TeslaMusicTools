@@ -6,12 +6,21 @@ from tesla_music.flattener import sanitize_folder_name
 PLAYLISTS_FOLDER = Path("data/playlists")
 
 
-def search_library(artist_songs, query):
+SEARCH_FIELDS = {
+    "artist": lambda song: song.artist,
+    "title": lambda song: song.title,
+    "album": lambda song: song.album,
+}
+
+
+def search_library(artist_songs, query, fields=("artist", "title")):
     """
-    Finds songs where the search text appears in the Artist or Title field
-    (case-insensitive, substring match) -- e.g. searching "Lupe Fiasco"
-    catches both his own tracks and his features in other artists' titles.
-    Used by both the smart-playlist search and the manual-playlist picker.
+    Finds songs where the search text appears in any of the given fields
+    (case-insensitive, substring match). Defaults to Artist and Title --
+    e.g. searching "Lupe Fiasco" catches both his own tracks and his
+    features in other artists' titles. The manual-playlist picker searches
+    Album too, since you're just trying to find a song, not necessarily by
+    exact artist.
     """
     query = query.strip().lower()
 
@@ -22,7 +31,7 @@ def search_library(artist_songs, query):
 
     for songs in artist_songs.values():
         for song in songs:
-            if query in song.artist.lower() or query in song.title.lower():
+            if any(query in SEARCH_FIELDS[field](song).lower() for field in fields):
                 matches.append(song)
 
     return matches

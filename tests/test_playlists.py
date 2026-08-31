@@ -30,6 +30,21 @@ def test_search_library_matches_title_field_too(make_song):
     assert results == [feature]
 
 
+def test_search_library_does_not_match_album_by_default(make_song):
+    song = make_song("a.mp3", artist="Lupe Fiasco", album="Food & Liquor")
+
+    assert search_library({"Lupe Fiasco": [song]}, "Food & Liquor") == []
+
+
+def test_search_library_matches_album_when_field_requested(make_song):
+    song = make_song("a.mp3", artist="Lupe Fiasco", album="Food & Liquor")
+    artist_songs = {"Lupe Fiasco": [song]}
+
+    results = search_library(artist_songs, "Food & Liquor", fields=("artist", "title", "album"))
+
+    assert results == [song]
+
+
 def test_search_library_is_case_insensitive(make_song):
     song = make_song("a.mp3", artist="Lupe Fiasco")
     artist_songs = {"Lupe Fiasco": [song]}

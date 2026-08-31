@@ -67,6 +67,8 @@ DEFAULT_LIBRARY_PATH = "data/input"
 # defaults to unchecked instead of being bundled into "apply everything".
 DEDUP_REVIEW_THRESHOLD = 85
 
+PLAYLIST_RESULTS_PER_PAGE = 20
+
 
 # --- Shared helpers ---
 
@@ -1361,37 +1363,72 @@ def _render_manual_playlist_builder():
     added_paths = st.session_state["playlist_builder_songs"]
     song_by_path = {str(song.path): song for songs in artist_songs.values() for song in songs}
 
-    query = st.text_input("Search for songs to add", key="manual_playlist_query")
+    query = st.text_input(
+        "Search for songs to add (matches song, artist, or album)",
+        key="manual_playlist_query",
+    )
 
     if query:
-        matches = search_library(artist_songs, query)
-        max_results = 30
+        matches = search_library(artist_songs, query, fields=("artist", "title", "album"))
+
+        if query != st.session_state.get("manual_playlist_last_query"):
+            st.session_state["manual_playlist_last_query"] = query
+            st.session_state["manual_playlist_page"] = 0
 
         if not matches:
             st.caption("No matches.")
+        else:
+            total_pages = -(-len(matches) // PLAYLIST_RESULTS_PER_PAGE)
+            page = min(st.session_state.get("manual_playlist_page", 0), total_pages - 1)
+            start = page * PLAYLIST_RESULTS_PER_PAGE
+            page_matches = matches[start : start + PLAYLIST_RESULTS_PER_PAGE]
 
-        for song in matches[:max_results]:
-            path = str(song.path)
-            result_col, button_col = st.columns([5, 1])
+            st.caption(f"{len(matches)} match(es) — page {page + 1} of {total_pages}")
 
-            with result_col:
-                st.caption(f"{song.artist} — {song.title}")
+            for song in page_matches:
+                path = str(song.path)
+                label = f"{song.artist} — {song.title}"
 
-            with button_col:
-                already_added = path in added_paths
+                if song.album and song.album != "Unknown":
+                    label += f" · {song.album}"
 
-                if st.button(
-                    "Added" if already_added else "Add",
-                    disabled=already_added,
-                    key=f"manual_playlist_add_{path}",
-                ):
-                    added_paths.append(path)
-                    st.rerun()
+                result_col, button_col = st.columns([5, 1])
 
-        if len(matches) > max_results:
-            st.caption(
-                f"{len(matches) - max_results} more match(es) — refine your search to narrow it down."
-            )
+                with result_col:
+                    st.caption(label)
+
+                with button_col:
+                    already_added = path in added_paths
+
+                    if st.button(
+                        "Added" if already_added else "Add",
+                        disabled=already_added,
+                        key=f"manual_playlist_add_{path}",
+                    ):
+                        added_paths.append(path)
+                        st.rerun()
+
+            if total_pages > 1:
+                prev_col, page_col, next_col = st.columns([1, 2, 1])
+
+                with prev_col:
+                    if st.button(
+                        "← Previous", disabled=page == 0, key="manual_playlist_prev_page"
+                    ):
+                        st.session_state["manual_playlist_page"] = page - 1
+                        st.rerun()
+
+                with page_col:
+                    st.write(f"Page {page + 1} of {total_pages}")
+
+                with next_col:
+                    if st.button(
+                        "Next →",
+                        disabled=page >= total_pages - 1,
+                        key="manual_playlist_next_page",
+                    ):
+                        st.session_state["manual_playlist_page"] = page + 1
+                        st.rerun()
 
     st.divider()
 
