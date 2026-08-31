@@ -354,6 +354,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "title_feat_group_include_",
     "title_feat_preferred_",
     "playlist_export_plan_",
+    "playlist_export_all_plan",
 )
 
 
@@ -426,6 +427,8 @@ def _run_import(library_path):
         "artwork_plan",
         "flatten_plan",
         "restore_plan",
+        "playlist_export_all_plan",
+        "playlist_export_all_skipped",
     ]:
         st.session_state.pop(key, None)
 
@@ -1545,6 +1548,74 @@ def _render_date_playlist_builder():
         )
 
 
+def _render_export_all_playlists(saved_playlists, artist_songs, destination, organize_by):
+    st.write("**Export all playlists at once**, using the destination and organization above.")
+
+    if st.button("Preview All Playlists", key="playlist_export_all_preview"):
+        combined_changes = []
+        skipped_names = []
+
+        for playlist in saved_playlists:
+            found_songs, _ = resolve_playlist_songs(playlist, artist_songs)
+
+            if not found_songs:
+                skipped_names.append(playlist["name"])
+                continue
+
+            plan = build_playlist_export_plan(
+                found_songs, playlist["name"], destination, organize_by=organize_by
+            )
+            combined_changes.extend(plan["changes"])
+
+        st.session_state["playlist_export_all_plan"] = {
+            "total_files": len(combined_changes),
+            "changes": combined_changes,
+        }
+        st.session_state["playlist_export_all_skipped"] = skipped_names
+
+    all_plan = st.session_state.get("playlist_export_all_plan")
+
+    if all_plan is None:
+        return
+
+    skipped_names = st.session_state.get("playlist_export_all_skipped", [])
+
+    if skipped_names:
+        st.caption(f"Skipped (no songs found): {', '.join(skipped_names)}")
+
+    if all_plan["total_files"] == 0:
+        st.warning("Nothing to export — every playlist is empty right now.")
+        return
+
+    st.info(f"{all_plan['total_files']} file(s) across all playlists will be copied to {destination}")
+
+    needed_bytes = sum(Path(change["source"]).stat().st_size for change in all_plan["changes"])
+    _render_volume_storage_info(destination, needed_bytes=needed_bytes)
+
+    if st.button("Copy All Playlists", type="primary", key="playlist_export_all_copy"):
+        copy_progress_bar = st.progress(0, text="Starting export...")
+
+        results = apply_flatten(
+            all_plan,
+            dry_run=False,
+            on_progress=_make_progress_callback(
+                copy_progress_bar, "Copying files", "files", time.time()
+            ),
+        )
+
+        copy_progress_bar.empty()
+
+        copied = sum(1 for r in results if r["status"] == "copied")
+        failed = sum(1 for r in results if r["status"] == "failed")
+
+        message = f"Copied {copied} file(s) across all playlists."
+        if failed:
+            message += f" {failed} failed."
+
+        st.success(message)
+        _render_failure_details(results, "source", verb="copied")
+
+
 def _render_saved_playlists():
     saved_playlists = list_playlists()
 
@@ -1584,6 +1655,10 @@ def _render_saved_playlists():
     organize_by = {"Artist": "artist", "Album": "album", "Original filenames": None}[
         organize_by_choice
     ]
+
+    st.divider()
+    _render_export_all_playlists(saved_playlists, artist_songs, destination, organize_by)
+    st.divider()
 
     for i, playlist in enumerate(saved_playlists):
         found_songs, missing_paths = resolve_playlist_songs(playlist, artist_songs)
