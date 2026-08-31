@@ -2,30 +2,15 @@ import re
 from pathlib import Path
 
 from mutagen import File
-from mutagen.aiff import AIFFFile
 
 from tesla_music.models import Song
 
-# Last-resort fallback for files with no metadata anywhere (no tags, no
-# native chunks) -- strips a leading track number like "10 " or "10. " off
-# the filename so at least the title is a real, distinguishing value
-# instead of every untagged file colliding on the shared "Unknown"
-# placeholder (which breaks anything that groups songs by title, like
-# artwork lookup and duplicate detection).
+# Last-resort fallback for files with no metadata anywhere -- strips a
+# leading track number like "10 " or "10. " off the filename so at least
+# the title is a real, distinguishing value instead of every untagged file
+# colliding on the shared "Unknown" placeholder (which breaks anything that
+# groups songs by title, like artwork lookup and duplicate detection).
 FILENAME_TRACK_NUMBER_PATTERN = re.compile(r"^\d+[\s._-]+")
-
-AIFF_EXTENSIONS = (".aiff", ".aif")
-
-# Classic AIFF (predating ID3) has its own native text chunks -- NAME for
-# title, AUTH for artist. There's no album chunk in the AIFF spec at all.
-# Plenty of CD-ripping tools still write these instead of an ID3 tag, which
-# mutagen's AIFF support doesn't read at all -- so a file tagged this way
-# comes back as "Unknown" from the normal path above unless we also check
-# for these chunks directly.
-AIFF_NATIVE_CHUNKS = {
-    "title": "NAME",
-    "artist": "AUTH",
-}
 
 # WAV files are tagged with raw ID3 frames under the hood, and unlike MP3,
 # mutagen's easy=True mode doesn't map them to simple keys like "artist" --
@@ -71,17 +56,6 @@ def read_metadata(song_path: Path):
     song.title = _read_tag(audio, "title", "Unknown")
     song.bitrate = _read_bitrate_kbps(audio)
 
-    if song_path.suffix.lower() in AIFF_EXTENSIONS and (
-        song.title == "Unknown" or song.artist == "Unknown"
-    ):
-        native_tags = _read_native_aiff_tags(song_path)
-
-        if song.title == "Unknown" and native_tags.get("title"):
-            song.title = native_tags["title"]
-
-        if song.artist == "Unknown" and native_tags.get("artist"):
-            song.artist = native_tags["artist"]
-
     if song.title == "Unknown":
         title_from_filename = _title_from_filename(song_path)
 
@@ -95,20 +69,6 @@ def _title_from_filename(song_path):
     title = FILENAME_TRACK_NUMBER_PATTERN.sub("", song_path.stem).strip()
 
     return title or None
-
-
-def _read_native_aiff_tags(song_path):
-    try:
-        with open(song_path, "rb") as file:
-            iff = AIFFFile(file)
-
-            return {
-                field: iff[chunk_id].read().decode("utf-8", errors="replace").strip(" \x00")
-                for field, chunk_id in AIFF_NATIVE_CHUNKS.items()
-                if chunk_id in iff
-            }
-    except Exception:
-        return {}
 
 
 def _read_bitrate_kbps(audio):

@@ -9,8 +9,6 @@ AUDIO_EXTENSIONS = {
     ".m4a",
     ".aac",
     ".wav",
-    ".aiff",
-    ".aif",
 }
 
 

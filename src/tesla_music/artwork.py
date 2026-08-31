@@ -5,7 +5,6 @@ import urllib.request
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from mutagen.aiff import AIFF
 from mutagen.id3 import ID3, ID3NoHeaderError, APIC
 from mutagen.mp4 import MP4, MP4Cover
 from mutagen.wave import WAVE
@@ -38,10 +37,6 @@ def has_artwork(file_path):
 
     if suffix == ".wav":
         audio = WAVE(file_path)
-        return audio.tags is not None and len(audio.tags.getall("APIC")) > 0
-
-    if suffix in (".aiff", ".aif"):
-        audio = AIFF(file_path)
         return audio.tags is not None and len(audio.tags.getall("APIC")) > 0
 
     raise ValueError(f"Unsupported file type: {suffix}")
@@ -81,36 +76,27 @@ def embed_artwork(file_path, image_bytes, mime_type="image/jpeg"):
 
     elif suffix == ".wav":
         audio = WAVE(file_path)
-        _embed_id3_frame_artwork(audio, image_bytes, mime_type)
 
-    elif suffix in (".aiff", ".aif"):
-        audio = AIFF(file_path)
-        _embed_id3_frame_artwork(audio, image_bytes, mime_type)
+        if audio.tags is None:
+            audio.add_tags()
+
+        wav_tags = audio.tags
+        assert wav_tags is not None
+
+        wav_tags.delall("APIC")
+        wav_tags.add(
+            APIC(
+                encoding=3,
+                mime=mime_type,
+                type=3,
+                desc="Cover",
+                data=image_bytes,
+            )
+        )
+        audio.save()
 
     else:
         raise ValueError(f"Unsupported file type: {suffix}")
-
-
-def _embed_id3_frame_artwork(audio, image_bytes, mime_type):
-    if audio.tags is None:
-        audio.add_tags()
-
-    id3_tags = audio.tags
-    assert id3_tags is not None
-
-    id3_tags.delall("APIC")
-    id3_tags.add(
-        APIC(
-            encoding=3,
-            mime=mime_type,
-            type=3,
-            desc="Cover",
-            data=image_bytes,
-        )
-    )
-    audio.save()
-
-    return True
 
 
 def _similarity(expected, actual):

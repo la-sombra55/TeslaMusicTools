@@ -125,27 +125,6 @@ def test_has_artwork_false_when_wav_has_no_tags_at_all(monkeypatch):
     assert artwork.has_artwork("song.wav") is False
 
 
-@pytest.mark.parametrize("suffix", [".aiff", ".aif"])
-def test_has_artwork_true_when_aiff_has_apic_frame(monkeypatch, suffix):
-    monkeypatch.setattr(
-        artwork, "AIFF", lambda path: FakeWaveAudio(tags=FakeID3Tags(["fake_apic"]))
-    )
-
-    assert artwork.has_artwork(f"song{suffix}") is True
-
-
-def test_has_artwork_false_when_aiff_has_no_apic_frame(monkeypatch):
-    monkeypatch.setattr(artwork, "AIFF", lambda path: FakeWaveAudio(tags=FakeID3Tags([])))
-
-    assert artwork.has_artwork("song.aiff") is False
-
-
-def test_has_artwork_false_when_aiff_has_no_tags_at_all(monkeypatch):
-    monkeypatch.setattr(artwork, "AIFF", lambda path: FakeWaveAudio(tags=None))
-
-    assert artwork.has_artwork("song.aiff") is False
-
-
 def test_has_artwork_raises_for_unsupported_extension():
     with pytest.raises(ValueError, match="Unsupported file type"):
         artwork.has_artwork("song.flac")
@@ -204,29 +183,6 @@ def test_embed_artwork_creates_tags_for_wav_when_missing(monkeypatch):
     monkeypatch.setattr(artwork, "WAVE", lambda path: fake_audio)
 
     artwork.embed_artwork("song.wav", b"image bytes")
-
-    assert fake_audio.tags is not None
-    assert len(fake_audio.tags._apic_frames) == 1
-    assert fake_audio.saved is True
-
-
-@pytest.mark.parametrize("suffix", [".aiff", ".aif"])
-def test_embed_artwork_adds_apic_frame_for_aiff(monkeypatch, suffix):
-    fake_tags = FakeID3Tags([])
-    fake_audio = FakeWaveAudio(tags=fake_tags)
-    monkeypatch.setattr(artwork, "AIFF", lambda path: fake_audio)
-
-    artwork.embed_artwork(f"song{suffix}", b"image bytes", "image/jpeg")
-
-    assert len(fake_tags._apic_frames) == 1
-    assert fake_audio.saved is True
-
-
-def test_embed_artwork_creates_tags_for_aiff_when_missing(monkeypatch):
-    fake_audio = FakeWaveAudio(tags=None)
-    monkeypatch.setattr(artwork, "AIFF", lambda path: fake_audio)
-
-    artwork.embed_artwork("song.aiff", b"image bytes")
 
     assert fake_audio.tags is not None
     assert len(fake_audio.tags._apic_frames) == 1
