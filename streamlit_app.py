@@ -1831,18 +1831,19 @@ def _render_date_playlist_builder():
 
 def _render_genre_playlist_builder():
     st.write(
-        "Find songs by search or by date added, then turn them into their "
-        "own genre so they group together as a \"playlist\" in the Tesla's "
-        "Genre browser — without duplicating any files. Unlike the "
-        "playlist builders above, this doesn't save a playlist file: it "
-        "rewrites the Genre tag on the matched songs directly (a backup "
-        "is made first). Each song's current genre is saved first, so it "
-        "can be put back later with Restore Original Genre."
+        "Find songs by search, by date added, or by matching against "
+        "another folder, then turn them into their own genre so they "
+        "group together as a \"playlist\" in the Tesla's Genre browser — "
+        "without duplicating any files. Unlike the playlist builders "
+        "above, this doesn't save a playlist file: it rewrites the Genre "
+        "tag on the matched songs directly (a backup is made first). "
+        "Each song's current genre is saved first, so it can be put back "
+        "later with Restore Original Genre."
     )
 
     selection_mode = st.segmented_control(
         "Find songs by",
-        ["Search", "Date range"],
+        ["Search", "Date range", "Folder"],
         default="Search",
         required=True,
         key="genre_playlist_mode",
@@ -1854,6 +1855,34 @@ def _render_genre_playlist_builder():
         query = st.text_input("Search for", key="genre_playlist_query")
         matches = search_library(artist_songs, query) if query else []
         signature = ("search", query)
+
+    elif selection_mode == "Folder":
+        st.caption(
+            "Matches by filename against any folder — handy as a last "
+            "resort for turning an old playlist export back into a genre, "
+            "or for keeping multiple libraries (like two USB drives) in "
+            "sync with each other."
+        )
+
+        folder_path = _folder_picker_input(
+            "Folder to match against",
+            key="genre_playlist_folder",
+            default_value="",
+            prompt="Select a folder",
+        )
+
+        if folder_path and Path(folder_path).is_dir():
+            reference_names = {song.path.name for song in scan_library(folder_path)}
+            matches = [
+                song
+                for songs in artist_songs.values()
+                for song in songs
+                if song.path.name in reference_names
+            ]
+        else:
+            matches = []
+
+        signature = ("folder", folder_path)
 
     else:
         preset = st.segmented_control(
@@ -1901,6 +1930,9 @@ def _render_genre_playlist_builder():
     if selection_mode == "Search" and not query:
         return
 
+    if selection_mode == "Folder" and not folder_path:
+        return
+
     if not matches:
         st.caption("No matches.")
         return
@@ -1909,6 +1941,8 @@ def _render_genre_playlist_builder():
 
     if selection_mode == "Search":
         st.info(f'{len(matches)} song{plural} match "{query}"')
+    elif selection_mode == "Folder":
+        st.info(f"{len(matches)} song{plural} matched by filename")
     else:
         st.info(f"{len(matches)} song{plural} added in this range")
 
