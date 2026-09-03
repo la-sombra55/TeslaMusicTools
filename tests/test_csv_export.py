@@ -12,6 +12,8 @@ def test_build_csv_rows_includes_expected_fields(make_song):
                 album_artist="Chris Brown",
                 album="Fortune",
                 title="Turn Up the Music",
+                genre="Hip-Hop",
+                grouping="Best of Chris Brown",
                 bitrate=320,
             )
         ]
@@ -24,6 +26,8 @@ def test_build_csv_rows_includes_expected_fields(make_song):
             "Title": "Turn Up the Music",
             "Artist": "Chris Brown",
             "Album": "Fortune",
+            "Genre": "Hip-Hop",
+            "Grouping": "Best of Chris Brown",
             "Format": "mp3",
             "Bitrate (kbps)": 320,
         }
@@ -104,6 +108,8 @@ def test_write_csv_export_writes_a_real_readable_csv(tmp_path):
             "Title": "Turn Up the Music",
             "Artist": "Chris Brown",
             "Album": "Fortune",
+            "Genre": "Hip-Hop",
+            "Grouping": "",
             "Format": "mp3",
             "Bitrate (kbps)": 320,
         }
@@ -137,5 +143,13 @@ def test_write_csv_export_writes_header_even_with_no_rows(tmp_path):
 
     with open(destination, newline="", encoding="utf-8") as file:
         reader = csv.DictReader(file)
-        assert reader.fieldnames == ["Title", "Artist", "Album", "Format", "Bitrate (kbps)"]
+        assert reader.fieldnames == [
+            "Title",
+            "Artist",
+            "Album",
+            "Genre",
+            "Grouping",
+            "Format",
+            "Bitrate (kbps)",
+        ]
         assert list(reader) == []
