@@ -22,6 +22,7 @@ ID3_FRAME_KEYS = {
     "album": "TALB",
     "title": "TIT2",
     "genre": "TCON",
+    "grouping": "TIT1",
 }
 
 
@@ -56,6 +57,7 @@ def read_metadata(song_path: Path):
     song.album = _read_tag(audio, "album", "Unknown")
     song.title = _read_tag(audio, "title", "Unknown")
     song.genre = _read_tag(audio, "genre", "Unknown")
+    song.grouping = _read_tag(audio, "grouping", "")
     song.bitrate = _read_bitrate_kbps(audio)
 
     if song.title == "Unknown":

@@ -150,3 +150,33 @@ def test_update_tags_sets_genre_id3_frame_for_wav(monkeypatch):
 
     assert fake_audio.tags.frames["TCON"].text == ["Hip-Hop"]
     assert fake_audio.saved is True
+
+
+def test_update_tags_sets_grouping_for_mp3(monkeypatch):
+    fake_audio = FakeAudio()
+    monkeypatch.setattr(writer, "File", lambda path, easy=False: fake_audio)
+
+    writer.update_tags(Path("song.mp3"), {"grouping": "Best of Lupe Fiasco"})
+
+    assert fake_audio.tags["grouping"] == ["Best of Lupe Fiasco"]
+    assert fake_audio.saved is True
+
+
+def test_update_tags_sets_grouping_atom_for_m4a(monkeypatch):
+    fake_audio = FakeAudio()
+    monkeypatch.setattr(writer, "File", lambda path, easy=False: fake_audio)
+
+    writer.update_tags(Path("song.m4a"), {"grouping": "Best of Lupe Fiasco"})
+
+    assert fake_audio.tags["\xa9grp"] == ["Best of Lupe Fiasco"]
+    assert fake_audio.saved is True
+
+
+def test_update_tags_sets_grouping_id3_frame_for_wav(monkeypatch):
+    fake_audio = FakeWaveAudio(tags=FakeWavTags())
+    monkeypatch.setattr(writer, "WAVE", lambda path: fake_audio)
+
+    writer.update_tags(Path("song.wav"), {"grouping": "Best of Lupe Fiasco"})
+
+    assert fake_audio.tags.frames["TIT1"].text == ["Best of Lupe Fiasco"]
+    assert fake_audio.saved is True

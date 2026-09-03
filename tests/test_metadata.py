@@ -28,6 +28,7 @@ def test_read_metadata_populates_song_from_tags(monkeypatch):
                 "album": ["X"],
                 "title": ["Deuces"],
                 "genre": ["Hip-Hop"],
+                "grouping": ["Best of Lupe Fiasco"],
             }
         ),
     )
@@ -39,6 +40,7 @@ def test_read_metadata_populates_song_from_tags(monkeypatch):
     assert song.album == "X"
     assert song.title == "Deuces"
     assert song.genre == "Hip-Hop"
+    assert song.grouping == "Best of Lupe Fiasco"
 
 
 def test_read_metadata_defaults_missing_tags_to_unknown(monkeypatch):
@@ -49,6 +51,7 @@ def test_read_metadata_defaults_missing_tags_to_unknown(monkeypatch):
     assert song.artist == "Unknown"
     assert song.album == "Unknown"
     assert song.genre == "Unknown"
+    assert song.grouping == ""
 
 
 def test_read_metadata_returns_song_with_defaults_when_audio_is_none(monkeypatch):
@@ -75,6 +78,7 @@ def test_read_metadata_falls_back_to_raw_id3_frames_for_wav_files(monkeypatch):
                 "TALB": FakeID3Frame("X"),
                 "TIT2": FakeID3Frame("Deuces"),
                 "TCON": FakeID3Frame("Hip-Hop"),
+                "TIT1": FakeID3Frame("Best of Lupe Fiasco"),
             }
         ),
     )
@@ -86,6 +90,7 @@ def test_read_metadata_falls_back_to_raw_id3_frames_for_wav_files(monkeypatch):
     assert song.title == "Deuces"
     assert song.album_artist == "Unknown"
     assert song.genre == "Hip-Hop"
+    assert song.grouping == "Best of Lupe Fiasco"
 
 
 def test_read_metadata_prefers_easy_keys_over_raw_id3_frames(monkeypatch):

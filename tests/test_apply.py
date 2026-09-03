@@ -262,6 +262,64 @@ def test_successful_apply_writes_genre_tag_when_present(monkeypatch):
     assert results[0]["new_genre"] == "Hip-Hop"
 
 
+def test_successful_apply_writes_grouping_tag_when_present(monkeypatch):
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/d.mp3")
+    )
+
+    captured_tags = {}
+
+    def fake_update_tags(file_path, tags):
+        captured_tags.update(tags)
+        return True
+
+    monkeypatch.setattr(apply, "update_tags", fake_update_tags)
+
+    plan = _plan(
+        [
+            {
+                "file": "d.mp3",
+                "current_genre": "Hip-Hop",
+                "new_genre": "Best of Lupe Fiasco",
+                "new_grouping": "Hip-Hop",
+            }
+        ]
+    )
+
+    results = apply.apply_changes(plan, dry_run=False)
+
+    assert captured_tags == {"genre": "Best of Lupe Fiasco", "grouping": "Hip-Hop"}
+    assert results[0]["new_grouping"] == "Hip-Hop"
+
+
+def test_successful_apply_writes_empty_grouping_tag_to_clear_it(monkeypatch):
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/e.mp3")
+    )
+
+    captured_tags = {}
+
+    def fake_update_tags(file_path, tags):
+        captured_tags.update(tags)
+        return True
+
+    monkeypatch.setattr(apply, "update_tags", fake_update_tags)
+
+    plan = _plan(
+        [
+            {
+                "file": "e.mp3",
+                "new_genre": "Hip-Hop",
+                "new_grouping": "",
+            }
+        ]
+    )
+
+    apply.apply_changes(plan, dry_run=False)
+
+    assert captured_tags == {"genre": "Hip-Hop", "grouping": ""}
+
+
 def test_print_apply_report_shows_album_change_when_present(capsys):
     results = [
         {

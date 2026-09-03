@@ -19,6 +19,9 @@ def _tag_updates(change):
     if change.get("new_genre") is not None:
         tags["genre"] = change["new_genre"]
 
+    if change.get("new_grouping") is not None:
+        tags["grouping"] = change["new_grouping"]
+
     return tags
 
 
@@ -44,6 +47,8 @@ def apply_changes(plan, dry_run=True, library_path=None, on_progress=None):
             "new_album": change.get("new_album"),
             "current_genre": change.get("current_genre"),
             "new_genre": change.get("new_genre"),
+            "current_grouping": change.get("current_grouping"),
+            "new_grouping": change.get("new_grouping"),
             "status": "pending",
         }
 

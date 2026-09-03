@@ -11,6 +11,7 @@ class Song:
     album: str = "Unknown"
     title: str = "Unknown"
     genre: str = "Unknown"
+    grouping: str = ""
     bitrate: int = 0
 
     def __str__(self):
