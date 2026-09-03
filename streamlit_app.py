@@ -364,6 +364,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "album_dedup_include_",
     "genre_keep_",
     "genre_include_",
+    "genre_custom_",
     "title_feat_group_include_",
     "title_feat_preferred_",
     "playlist_export_plan_",
@@ -435,6 +436,7 @@ def _run_import(library_path):
     st.session_state["multi_artist_candidates"] = multi_artist_candidates
     st.session_state["artist_spelling_groups"] = artist_spelling_groups
     st.session_state["genre_recommendations"] = genre_recommendations
+    st.session_state["genre_counts"] = genre_counts
     st.session_state["duplicate_plan"] = duplicate_plan
     st.session_state["drm_plan"] = drm_plan
     st.session_state["drm_songs"] = drm_songs
@@ -656,15 +658,34 @@ def _render_duplicate_artist_tool():
         _print_apply_results(results)
 
 
+GENRE_CUSTOM_OPTION = "✎ Type your own..."
+
+
 def _render_genre_tool():
     st.subheader("Genre")
-    st.write("Merges different spellings of the same genre (e.g. \"Hip Hop\", \"hip-hop\").")
+    st.write(
+        "Finds different spellings of the same genre. For each group, pick "
+        "the genre you want those songs to fall under — any genre already "
+        "in your library, or a brand-new one you type — so you can combine "
+        "similar genres into fewer, bigger buckets."
+    )
 
     recommendations = st.session_state.get("genre_recommendations", [])
+    genre_counts = st.session_state.get("genre_counts", {})
 
     if not recommendations:
         st.success("✅ No duplicate genre spellings found.")
         return
+
+    all_genre_names = sorted(genre_counts.keys(), key=str.casefold)
+    genre_options = all_genre_names + [GENRE_CUSTOM_OPTION]
+
+    def _format_genre_option(name):
+        if name == GENRE_CUSTOM_OPTION:
+            return name
+
+        count = genre_counts.get(name, 0)
+        return f'{name} ({count} song{"s" if count != 1 else ""})'
 
     selected_recommendations = []
 
@@ -674,10 +695,6 @@ def _render_genre_tool():
         candidate_names = [c["genre"] for c in candidates]
         variants_preview = " / ".join(candidate_names)
         label = f'{variants_preview} — {rec["confidence"]}% confidence ({rec["reason"]})'
-        candidate_labels = {
-            c["genre"]: f'{c["genre"]} ({c["count"]} song{"s" if c["count"] != 1 else ""})'
-            for c in candidates
-        }
 
         with st.expander(label, expanded=needs_review):
             if needs_review:
@@ -686,26 +703,41 @@ def _render_genre_tool():
                     "the same genre before including it."
                 )
 
-            keep_name = st.selectbox(
+            default_genre = rec["keep"]
+            default_index = (
+                genre_options.index(default_genre) if default_genre in genre_options else 0
+            )
+
+            selection = st.selectbox(
                 "Standardize to",
-                candidate_names,
-                format_func=lambda name: candidate_labels[name],
+                genre_options,
+                index=default_index,
+                format_func=_format_genre_option,
                 key=f"genre_keep_{i}",
             )
+
+            if selection == GENRE_CUSTOM_OPTION:
+                keep_name = st.text_input("New genre name", key=f"genre_custom_{i}").strip()
+            else:
+                keep_name = selection
 
             for candidate in candidates:
                 if candidate["genre"] == keep_name:
                     continue
 
-                st.write(f'"{candidate["genre"]}" → "{keep_name}" ({candidate["count"]} songs)')
+                display_name = keep_name or "?"
+                st.write(f'"{candidate["genre"]}" → "{display_name}" ({candidate["count"]} songs)')
                 for song in candidate["songs"]:
                     st.caption(song.path.name)
 
             include = st.checkbox(
-                "Include this merge", value=not needs_review, key=f"genre_include_{i}"
+                "Include this merge",
+                value=not needs_review,
+                key=f"genre_include_{i}",
+                disabled=not keep_name,
             )
 
-        if include:
+        if include and keep_name:
             selected_recommendations.append(
                 {
                     "keep": keep_name,
