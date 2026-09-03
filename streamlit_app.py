@@ -1872,7 +1872,7 @@ def _render_genre_playlist_builder():
         )
 
         if folder_path and Path(folder_path).is_dir():
-            reference_names = {song.path.name for song in scan_library(folder_path)}
+            reference_names = {path.name for path in scan_library(folder_path)}
             matches = [
                 song
                 for songs in artist_songs.values()
