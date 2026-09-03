@@ -7,27 +7,36 @@ IMPORT_HISTORY_FILE = Path("data/import_history.json")
 
 def record_import_session(song_paths, timestamp=None):
     """
-    Appends a record of exactly which songs were included in an Import
-    Library run. Playlists "by date" are built from this history rather
-    than each file's own filesystem timestamps -- a file moved or copied
-    in from elsewhere (e.g. an old purchased track bundled into a fresh
-    batch of CD rips) can keep a much older creation date than when it
-    actually entered this library, which makes filesystem timestamps
-    unreliable for "when was this added here."
+    Appends a record of the songs newly seen since the last recorded
+    session -- not every song currently in the library. This gets called
+    on every library scan, including internal refreshes after a Clean Up
+    Tool operation (not just a user-initiated Import Library click), and
+    a full scan naturally includes files that were already recorded in an
+    earlier session. Recording the whole scan every time would make every
+    session (including refresh-triggered ones) balloon to the size of the
+    entire library, and "songs added between X and Y" would match nearly
+    everything. Recording only the delta keeps each session meaning what
+    it says: songs that are actually new as of that point in time.
     """
-    timestamp = timestamp or datetime.now()
     sessions = _load_sessions()
+    already_recorded = {path for session in sessions for path in session["songs"]}
 
-    sessions.append(
-        {
-            "timestamp": timestamp.isoformat(),
-            "songs": [str(path) for path in song_paths],
-        }
-    )
+    new_paths = [str(path) for path in song_paths if str(path) not in already_recorded]
 
+    if not new_paths:
+        return None
+
+    timestamp = timestamp or datetime.now()
+
+    session = {
+        "timestamp": timestamp.isoformat(),
+        "songs": new_paths,
+    }
+
+    sessions.append(session)
     _save_sessions(sessions)
 
-    return sessions[-1]
+    return session
 
 
 def list_import_sessions():

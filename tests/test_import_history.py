@@ -36,6 +36,31 @@ def test_record_import_session_appends_rather_than_overwrites(tmp_path, monkeypa
     assert len(list_import_sessions()) == 2
 
 
+def test_record_import_session_only_stores_songs_new_since_last_session(tmp_path, monkeypatch):
+    # A later scan of the whole library naturally re-includes songs from
+    # an earlier session (e.g. a refresh after moving DRM files) -- only
+    # the genuinely new songs should be recorded, not the whole scan.
+    monkeypatch.setattr(import_history, "IMPORT_HISTORY_FILE", tmp_path / "history.json")
+
+    record_import_session(["a.mp3", "b.mp3"], timestamp=datetime.now())
+    record_import_session(["a.mp3", "b.mp3", "c.mp3"], timestamp=datetime.now())
+
+    sessions = list_import_sessions()
+
+    assert len(sessions) == 2
+    assert sessions[1]["songs"] == ["c.mp3"]
+
+
+def test_record_import_session_records_nothing_when_no_songs_are_new(tmp_path, monkeypatch):
+    monkeypatch.setattr(import_history, "IMPORT_HISTORY_FILE", tmp_path / "history.json")
+
+    record_import_session(["a.mp3"], timestamp=datetime.now())
+    result = record_import_session(["a.mp3"], timestamp=datetime.now())
+
+    assert result is None
+    assert len(list_import_sessions()) == 1
+
+
 def test_find_songs_from_sessions_between_includes_a_session_in_range(tmp_path, monkeypatch):
     monkeypatch.setattr(import_history, "IMPORT_HISTORY_FILE", tmp_path / "history.json")
 

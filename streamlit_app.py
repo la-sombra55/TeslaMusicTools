@@ -368,6 +368,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "genre_manual_",
     "genre_playlist_",
     "restore_genre_",
+    "reset_all_genres_",
     "title_feat_group_include_",
     "title_feat_preferred_",
     "playlist_export_plan_",
@@ -453,6 +454,7 @@ def _run_import(library_path):
         "genre_manual_groups",
         "genre_playlist_apply_results",
         "restore_genre_apply_results",
+        "reset_all_genres_apply_results",
         "artwork_plan",
         "flatten_plan",
         "restore_plan",
@@ -1829,24 +1831,74 @@ def _render_date_playlist_builder():
 
 def _render_genre_playlist_builder():
     st.write(
-        "Search your library, then turn the matches into their own genre "
-        "so they group together as a \"playlist\" in the Tesla's Genre "
-        "browser — without duplicating any files. Unlike the playlist "
-        "builders above, this doesn't save a playlist file: it rewrites "
-        "the Genre tag on the matched songs directly (a backup is made "
-        "first). Each song's current genre is saved first, so it can be "
-        "put back later with Restore Original Genre."
+        "Find songs by search or by date added, then turn them into their "
+        "own genre so they group together as a \"playlist\" in the Tesla's "
+        "Genre browser — without duplicating any files. Unlike the "
+        "playlist builders above, this doesn't save a playlist file: it "
+        "rewrites the Genre tag on the matched songs directly (a backup "
+        "is made first). Each song's current genre is saved first, so it "
+        "can be put back later with Restore Original Genre."
     )
 
-    query = st.text_input("Search for", key="genre_playlist_query")
-    artist_songs = st.session_state["report"]["artist_songs"]
-    matches = search_library(artist_songs, query) if query else []
+    selection_mode = st.segmented_control(
+        "Find songs by",
+        ["Search", "Date range"],
+        default="Search",
+        required=True,
+        key="genre_playlist_mode",
+    )
 
-    if query != st.session_state.get("genre_playlist_last_query"):
-        st.session_state["genre_playlist_last_query"] = query
+    artist_songs = st.session_state["report"]["artist_songs"]
+
+    if selection_mode == "Search":
+        query = st.text_input("Search for", key="genre_playlist_query")
+        matches = search_library(artist_songs, query) if query else []
+        signature = ("search", query)
+
+    else:
+        preset = st.segmented_control(
+            "Range",
+            ["Today", "Last 24 hours", "Last 7 days", "Custom range"],
+            default="Today",
+            required=True,
+            key="genre_playlist_date_preset",
+        )
+
+        now = datetime.now()
+
+        if preset == "Today":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            end = now
+        elif preset == "Last 24 hours":
+            start = now - timedelta(hours=24)
+            end = now
+        elif preset == "Last 7 days":
+            start = now - timedelta(days=7)
+            end = now
+        else:
+            range_col1, range_col2 = st.columns(2)
+
+            with range_col1:
+                start_date = st.date_input(
+                    "From", value=now.date(), key="genre_playlist_date_start"
+                )
+
+            with range_col2:
+                end_date = st.date_input(
+                    "To", value=now.date(), key="genre_playlist_date_end"
+                )
+
+            start = datetime.combine(start_date, datetime.min.time())
+            end = datetime.combine(end_date, datetime.max.time())
+
+        matches = find_songs_added_between(artist_songs, start, end)
+        signature = ("date", preset, str(start), str(end))
+
+    if signature != st.session_state.get("genre_playlist_last_signature"):
+        st.session_state["genre_playlist_last_signature"] = signature
         st.session_state.pop("genre_playlist_selected", None)
 
-    if not query:
+    if selection_mode == "Search" and not query:
         return
 
     if not matches:
@@ -1854,7 +1906,11 @@ def _render_genre_playlist_builder():
         return
 
     plural = "s" if len(matches) != 1 else ""
-    st.info(f'{len(matches)} song{plural} match "{query}"')
+
+    if selection_mode == "Search":
+        st.info(f'{len(matches)} song{plural} match "{query}"')
+    else:
+        st.info(f"{len(matches)} song{plural} added in this range")
 
     song_by_path = {str(song.path): song for song in matches}
     match_labels = {path: f"{song.artist} — {song.title}" for path, song in song_by_path.items()}
@@ -2001,6 +2057,91 @@ def _render_restore_original_genre():
         st.rerun()
 
     results = st.session_state.get("restore_genre_apply_results")
+
+    if results:
+        _print_apply_results(results)
+
+
+def _render_reset_all_genres():
+    st.write(
+        "Moves every song's current genre into Grouping and resets Genre "
+        "to \"Unknown\" across your whole library — a blank slate for "
+        "building genres as playlists from scratch with the Genre "
+        "Playlist Builder. Best used on a copy of your library meant for "
+        "the USB drive, not your master collection — your computer's "
+        "copy would lose its real genre browsing, though nothing is "
+        "actually gone: it's saved in Grouping and can always be put "
+        "back with Restore Original Genre."
+    )
+
+    artist_songs = st.session_state["report"]["artist_songs"]
+    all_songs = [song for songs in artist_songs.values() for song in songs]
+
+    resettable_songs = [
+        song for song in all_songs if not song.grouping and song.genre != "Unknown"
+    ]
+    already_stashed = len(all_songs) - len(resettable_songs)
+
+    if not resettable_songs:
+        st.success("✅ Nothing to reset — every song is already \"Unknown\" or has a saved genre.")
+        return
+
+    plural = "s" if len(resettable_songs) != 1 else ""
+    st.warning(
+        f'{len(resettable_songs)} song{plural} will have their genre moved to '
+        'Grouping and reset to "Unknown".'
+    )
+
+    if already_stashed:
+        plural = "s" if already_stashed != 1 else ""
+        st.caption(
+            f"{already_stashed} song{plural} already have something saved in "
+            "Grouping (from a genre playlist or an earlier reset) or are "
+            "already \"Unknown\", and will be skipped."
+        )
+
+    confirm = st.checkbox(
+        "I understand this will modify my music files (a backup is made first)",
+        key="confirm_reset_all_genres",
+    )
+
+    if st.button(
+        "Reset All Genres",
+        type="primary",
+        disabled=not confirm,
+        key="apply_reset_all_genres",
+    ):
+        changes = [
+            {
+                "file": str(song.path),
+                "current_genre": song.genre,
+                "new_genre": "Unknown",
+                "new_grouping": song.genre,
+            }
+            for song in resettable_songs
+        ]
+        plan = build_plan(changes)
+
+        reset_genre_progress_bar = st.progress(0, text="Starting genre reset...")
+
+        reset_genre_results = apply_changes(
+            plan,
+            dry_run=False,
+            library_path=st.session_state["library_path"],
+            on_progress=_make_progress_callback(
+                reset_genre_progress_bar, "Resetting genres", "files", time.time()
+            ),
+        )
+
+        reset_genre_progress_bar.empty()
+
+        with st.spinner("Refreshing library data..."):
+            _refresh_library_state()
+
+        st.session_state["reset_all_genres_apply_results"] = reset_genre_results
+        st.rerun()
+
+    results = st.session_state.get("reset_all_genres_apply_results")
 
     if results:
         _print_apply_results(results)
@@ -2231,6 +2372,7 @@ def _render_playlist_export():
             "New Playlist by Date",
             "New Genre Playlist",
             "Restore Original Genre",
+            "Reset All Genres",
         ],
         default="Your Playlists",
         required=True,
@@ -2249,8 +2391,10 @@ def _render_playlist_export():
         _render_date_playlist_builder()
     elif playlist_mode == "New Genre Playlist":
         _render_genre_playlist_builder()
-    else:
+    elif playlist_mode == "Restore Original Genre":
         _render_restore_original_genre()
+    else:
+        _render_reset_all_genres()
 
 
 EXPORT_MODES = {
