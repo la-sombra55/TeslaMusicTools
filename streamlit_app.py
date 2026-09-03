@@ -366,7 +366,8 @@ STALE_WIDGET_KEY_PREFIXES = (
     "genre_include_",
     "genre_custom_",
     "genre_manual_",
-    "genre_playlist_",
+    "genre_playlist_selected",
+    "genre_playlist_batch_include_",
     "restore_genre_",
     "reset_all_genres_",
     "title_feat_group_include_",
@@ -1829,6 +1830,89 @@ def _render_date_playlist_builder():
         )
 
 
+def _render_genre_playlist_batch(batch_groups):
+    st.write(
+        f"Found {len(batch_groups)} subfolder(s) — each becomes its own "
+        "genre, named after the subfolder."
+    )
+
+    genre_counts = st.session_state.get("genre_counts", {})
+    selected_groups = []
+
+    for group in batch_groups:
+        already_exists = group["name"] in genre_counts
+        plural = "s" if len(group["songs"]) != 1 else ""
+        label = f'{group["name"]} — {len(group["songs"])} song{plural}'
+
+        if already_exists:
+            label += " (already a genre — unchecked by default)"
+
+        include = st.checkbox(
+            label,
+            value=not already_exists,
+            key=f"genre_playlist_batch_include_{group['name']}",
+        )
+
+        if include:
+            selected_groups.append(group)
+
+    total_songs = sum(len(group["songs"]) for group in selected_groups)
+
+    if selected_groups:
+        plural = "s" if total_songs != 1 else ""
+        st.warning(
+            f"{total_songs} file{plural} across {len(selected_groups)} "
+            "genre(s) will be changed."
+        )
+
+    confirm = st.checkbox(
+        "I understand this will modify my music files (a backup is made first)",
+        key="confirm_genre_playlist_batch",
+    )
+
+    if st.button(
+        "Apply Genre Playlists",
+        type="primary",
+        disabled=not confirm or not selected_groups,
+        key="apply_genre_playlist_batch",
+    ):
+        changes = [
+            {
+                "file": str(song.path),
+                "current_genre": song.genre,
+                "new_genre": group["name"],
+                "new_grouping": song.genre,
+            }
+            for group in selected_groups
+            for song in group["songs"]
+        ]
+        plan = build_plan(changes)
+
+        batch_progress_bar = st.progress(0, text="Starting genre playlists...")
+
+        batch_results = apply_changes(
+            plan,
+            dry_run=False,
+            library_path=st.session_state["library_path"],
+            on_progress=_make_progress_callback(
+                batch_progress_bar, "Applying genre playlists", "files", time.time()
+            ),
+        )
+
+        batch_progress_bar.empty()
+
+        with st.spinner("Refreshing library data..."):
+            _refresh_library_state()
+
+        st.session_state["genre_playlist_apply_results"] = batch_results
+        st.rerun()
+
+    results = st.session_state.get("genre_playlist_apply_results")
+
+    if results:
+        _print_apply_results(results)
+
+
 def _render_genre_playlist_builder():
     st.write(
         "Find songs by search, by date added, or by matching against "
@@ -1861,7 +1945,9 @@ def _render_genre_playlist_builder():
             "Matches by filename against any folder — handy as a last "
             "resort for turning an old playlist export back into a genre, "
             "or for keeping multiple libraries (like two USB drives) in "
-            "sync with each other."
+            "sync with each other. If the folder has subfolders (like a "
+            "parent \"Playlists\" folder), each one becomes its own genre "
+            "named after the subfolder."
         )
 
         folder_path = _folder_picker_input(
@@ -1871,16 +1957,49 @@ def _render_genre_playlist_builder():
             prompt="Select a folder",
         )
 
-        if folder_path and Path(folder_path).is_dir():
-            reference_names = {path.name for path in scan_library(folder_path)}
-            matches = [
+        if not folder_path:
+            return
+
+        folder = Path(folder_path)
+
+        if not folder.is_dir():
+            st.caption("Folder not found.")
+            return
+
+        subfolders = sorted(
+            (path for path in folder.iterdir() if path.is_dir()),
+            key=lambda path: path.name.casefold(),
+        )
+
+        batch_groups = []
+
+        for subfolder in subfolders:
+            reference_names = {path.name for path in scan_library(subfolder)}
+
+            if not reference_names:
+                continue
+
+            matched_songs = [
                 song
                 for songs in artist_songs.values()
                 for song in songs
                 if song.path.name in reference_names
             ]
-        else:
-            matches = []
+
+            if matched_songs:
+                batch_groups.append({"name": subfolder.name, "songs": matched_songs})
+
+        if batch_groups:
+            _render_genre_playlist_batch(batch_groups)
+            return
+
+        reference_names = {path.name for path in scan_library(folder_path)}
+        matches = [
+            song
+            for songs in artist_songs.values()
+            for song in songs
+            if song.path.name in reference_names
+        ]
 
         signature = ("folder", folder_path)
 
@@ -1928,9 +2047,6 @@ def _render_genre_playlist_builder():
         st.session_state.pop("genre_playlist_selected", None)
 
     if selection_mode == "Search" and not query:
-        return
-
-    if selection_mode == "Folder" and not folder_path:
         return
 
     if not matches:
