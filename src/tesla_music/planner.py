@@ -54,6 +54,31 @@ def build_album_change_plan(recommendations):
     return build_plan(changes)
 
 
+def build_genre_change_plan(recommendations):
+    changes = []
+
+    for recommendation in recommendations:
+        keep_genre = recommendation["keep"]
+        confidence = recommendation["confidence"]
+        reason = recommendation["reason"]
+
+        for change in recommendation["change"]:
+            current_genre = change["genre"]
+
+            for song in change["songs"]:
+                changes.append(
+                    {
+                        "file": str(song.path),
+                        "current_genre": current_genre,
+                        "new_genre": keep_genre,
+                        "confidence": confidence,
+                        "reason": reason,
+                    }
+                )
+
+    return build_plan(changes)
+
+
 def build_plan(changes):
     return {
         "total_changes": len(changes),

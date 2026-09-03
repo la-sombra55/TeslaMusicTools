@@ -210,6 +210,36 @@ def test_successful_apply_writes_album_tag_when_present(monkeypatch):
     assert results[0]["new_album"] == "The KING"
 
 
+def test_successful_apply_writes_genre_tag_when_present(monkeypatch):
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/c.mp3")
+    )
+
+    captured_tags = {}
+
+    def fake_update_tags(file_path, tags):
+        captured_tags.update(tags)
+        return True
+
+    monkeypatch.setattr(apply, "update_tags", fake_update_tags)
+
+    plan = _plan(
+        [
+            {
+                "file": "c.mp3",
+                "current_genre": "Hip Hop",
+                "new_genre": "Hip-Hop",
+            }
+        ]
+    )
+
+    results = apply.apply_changes(plan, dry_run=False)
+
+    assert captured_tags == {"genre": "Hip-Hop"}
+    assert results[0]["current_genre"] == "Hip Hop"
+    assert results[0]["new_genre"] == "Hip-Hop"
+
+
 def test_print_apply_report_shows_album_change_when_present(capsys):
     results = [
         {

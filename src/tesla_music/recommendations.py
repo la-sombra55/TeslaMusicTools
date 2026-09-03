@@ -31,6 +31,42 @@ def build_recommendations(duplicate_groups, artist_songs):
     return recommendations
 
 
+def build_genre_recommendations(genre_groups, artist_songs):
+    songs_by_genre = {}
+
+    for songs in artist_songs.values():
+        for song in songs:
+            songs_by_genre.setdefault(song.genre, []).append(song)
+
+    recommendations = []
+
+    for group in genre_groups:
+        sorted_group = sorted(
+            group["genres"],
+            key=lambda x: x["count"],
+            reverse=True,
+        )
+
+        for candidate in sorted_group:
+            candidate["songs"] = songs_by_genre.get(candidate["genre"], [])
+
+        keep = sorted_group[0]
+        changes = sorted_group[1:]
+
+        recommendations.append(
+            {
+                "keep": keep["genre"],
+                "keep_count": keep["count"],
+                "change": changes,
+                "candidates": sorted_group,
+                "confidence": group["score"],
+                "reason": group["reason"],
+            }
+        )
+
+    return recommendations
+
+
 def build_album_recommendations(album_groups_by_artist, artist_songs):
     recommendations = []
 

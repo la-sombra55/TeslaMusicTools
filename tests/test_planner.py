@@ -1,6 +1,11 @@
 import json
 
-from tesla_music.planner import build_album_change_plan, build_change_plan, save_plan
+from tesla_music.planner import (
+    build_album_change_plan,
+    build_change_plan,
+    build_genre_change_plan,
+    save_plan,
+)
 
 
 def test_build_change_plan_flattens_songs_into_file_changes(make_song):
@@ -82,6 +87,41 @@ def test_build_album_change_plan_flattens_songs_into_file_changes(make_song):
 
 def test_build_album_change_plan_handles_no_recommendations():
     assert build_album_change_plan([]) == {"total_changes": 0, "changes": []}
+
+
+def test_build_genre_change_plan_flattens_songs_into_file_changes(make_song):
+    recommendations = [
+        {
+            "keep": "Hip-Hop",
+            "keep_count": 120,
+            "confidence": 85,
+            "reason": "Word order difference",
+            "change": [
+                {
+                    "genre": "Hip Hop",
+                    "count": 15,
+                    "songs": [make_song("a.mp3")],
+                }
+            ],
+        }
+    ]
+
+    plan = build_genre_change_plan(recommendations)
+
+    assert plan["total_changes"] == 1
+    assert plan["changes"] == [
+        {
+            "file": "a.mp3",
+            "current_genre": "Hip Hop",
+            "new_genre": "Hip-Hop",
+            "confidence": 85,
+            "reason": "Word order difference",
+        }
+    ]
+
+
+def test_build_genre_change_plan_handles_no_recommendations():
+    assert build_genre_change_plan([]) == {"total_changes": 0, "changes": []}
 
 
 def test_save_plan_writes_valid_json(tmp_path):

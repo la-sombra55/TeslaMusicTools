@@ -120,3 +120,33 @@ def test_update_tags_creates_tags_for_wav_when_missing(monkeypatch):
     assert fake_audio.tags is not None
     assert fake_audio.tags.frames["TPE1"].text == ["Chris Brown"]
     assert fake_audio.saved is True
+
+
+def test_update_tags_sets_genre_for_mp3(monkeypatch):
+    fake_audio = FakeAudio()
+    monkeypatch.setattr(writer, "File", lambda path, easy=False: fake_audio)
+
+    writer.update_tags(Path("song.mp3"), {"genre": "Hip-Hop"})
+
+    assert fake_audio.tags["genre"] == ["Hip-Hop"]
+    assert fake_audio.saved is True
+
+
+def test_update_tags_sets_genre_atom_for_m4a(monkeypatch):
+    fake_audio = FakeAudio()
+    monkeypatch.setattr(writer, "File", lambda path, easy=False: fake_audio)
+
+    writer.update_tags(Path("song.m4a"), {"genre": "Hip-Hop"})
+
+    assert fake_audio.tags["\xa9gen"] == ["Hip-Hop"]
+    assert fake_audio.saved is True
+
+
+def test_update_tags_sets_genre_id3_frame_for_wav(monkeypatch):
+    fake_audio = FakeWaveAudio(tags=FakeWavTags())
+    monkeypatch.setattr(writer, "WAVE", lambda path: fake_audio)
+
+    writer.update_tags(Path("song.wav"), {"genre": "Hip-Hop"})
+
+    assert fake_audio.tags.frames["TCON"].text == ["Hip-Hop"]
+    assert fake_audio.saved is True

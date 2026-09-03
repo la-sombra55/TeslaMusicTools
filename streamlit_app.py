@@ -1,6 +1,7 @@
 import subprocess
 import threading
 import time
+from collections import Counter
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -49,7 +50,13 @@ from tesla_music.multi_artist import (
     build_separator_choice,
     find_multi_artist_credits,
 )
-from tesla_music.planner import build_album_change_plan, build_change_plan, build_plan
+from tesla_music.normalizer import find_similar_genres
+from tesla_music.planner import (
+    build_album_change_plan,
+    build_change_plan,
+    build_genre_change_plan,
+    build_plan,
+)
 from tesla_music.playlists import (
     delete_playlist,
     find_songs_added_between,
@@ -58,7 +65,11 @@ from tesla_music.playlists import (
     save_playlist,
     search_library,
 )
-from tesla_music.recommendations import build_album_recommendations, build_recommendations
+from tesla_music.recommendations import (
+    build_album_recommendations,
+    build_genre_recommendations,
+    build_recommendations,
+)
 from tesla_music.restore import apply_restore, build_restore_plan
 from tesla_music.scanner import scan_library
 
@@ -351,6 +362,8 @@ STALE_WIDGET_KEY_PREFIXES = (
     "duplicate_artist_include_",
     "album_dedup_keep_",
     "album_dedup_include_",
+    "genre_keep_",
+    "genre_include_",
     "title_feat_group_include_",
     "title_feat_preferred_",
     "playlist_export_plan_",
@@ -390,6 +403,12 @@ def _run_import(library_path):
     multi_artist_candidates = find_multi_artist_credits(report["artist_songs"])
     artist_spelling_groups = find_artist_spelling_groups(report["artist_songs"])
 
+    genre_counts = Counter(
+        song.genre for songs in report["artist_songs"].values() for song in songs
+    )
+    genre_groups = find_similar_genres(genre_counts)
+    genre_recommendations = build_genre_recommendations(genre_groups, report["artist_songs"])
+
     duplicate_scan_songs = scan_library(library_path, extensions=DUPLICATE_SCAN_EXTENSIONS)
     _, duplicate_artist_songs = analyzer.analyze_artists(
         duplicate_scan_songs,
@@ -415,6 +434,7 @@ def _run_import(library_path):
     st.session_state["album_recommendations"] = album_recommendations
     st.session_state["multi_artist_candidates"] = multi_artist_candidates
     st.session_state["artist_spelling_groups"] = artist_spelling_groups
+    st.session_state["genre_recommendations"] = genre_recommendations
     st.session_state["duplicate_plan"] = duplicate_plan
     st.session_state["drm_plan"] = drm_plan
     st.session_state["drm_songs"] = drm_songs
@@ -424,6 +444,7 @@ def _run_import(library_path):
         "duplicate_artist_apply_results",
         "multi_artist_apply_results",
         "title_feat_apply_results",
+        "genre_apply_results",
         "artwork_plan",
         "flatten_plan",
         "restore_plan",
@@ -630,6 +651,91 @@ def _render_duplicate_artist_tool():
         st.rerun()
 
     results = st.session_state.get("duplicate_artist_apply_results")
+
+    if results:
+        _print_apply_results(results)
+
+
+def _render_genre_tool():
+    st.subheader("Genre")
+    st.write("Merges different spellings of the same genre (e.g. \"Hip Hop\", \"hip-hop\").")
+
+    recommendations = st.session_state.get("genre_recommendations", [])
+
+    if not recommendations:
+        st.success("✅ No duplicate genre spellings found.")
+        return
+
+    selected_recommendations = []
+
+    for i, rec in enumerate(recommendations):
+        needs_review = rec["confidence"] < DEDUP_REVIEW_THRESHOLD
+        candidates = rec["candidates"]
+        candidate_names = [c["genre"] for c in candidates]
+        variants_preview = " / ".join(candidate_names)
+        label = f'{variants_preview} — {rec["confidence"]}% confidence ({rec["reason"]})'
+        candidate_labels = {
+            c["genre"]: f'{c["genre"]} ({c["count"]} song{"s" if c["count"] != 1 else ""})'
+            for c in candidates
+        }
+
+        with st.expander(label, expanded=needs_review):
+            if needs_review:
+                st.caption(
+                    "⚠️ Lower-confidence match — double-check these are really "
+                    "the same genre before including it."
+                )
+
+            keep_name = st.selectbox(
+                "Standardize to",
+                candidate_names,
+                format_func=lambda name: candidate_labels[name],
+                key=f"genre_keep_{i}",
+            )
+
+            for candidate in candidates:
+                if candidate["genre"] == keep_name:
+                    continue
+
+                st.write(f'"{candidate["genre"]}" → "{keep_name}" ({candidate["count"]} songs)')
+                for song in candidate["songs"]:
+                    st.caption(song.path.name)
+
+            include = st.checkbox(
+                "Include this merge", value=not needs_review, key=f"genre_include_{i}"
+            )
+
+        if include:
+            selected_recommendations.append(
+                {
+                    "keep": keep_name,
+                    "change": [c for c in candidates if c["genre"] != keep_name],
+                    "confidence": rec["confidence"],
+                    "reason": rec["reason"],
+                }
+            )
+
+    plan = build_genre_change_plan(selected_recommendations)
+
+    st.warning(f"{plan['total_changes']} file(s) will be changed.")
+
+    confirm = st.checkbox(
+        "I understand this will modify my music files (a backup is made first)",
+        key="confirm_genre",
+    )
+
+    if st.button(
+        "Apply Genre Merges",
+        type="primary",
+        disabled=not confirm or plan["total_changes"] == 0,
+        key="apply_genre",
+    ):
+        st.session_state["genre_apply_results"] = apply_changes(
+            plan, dry_run=False, library_path=st.session_state["library_path"]
+        )
+        st.rerun()
+
+    results = st.session_state.get("genre_apply_results")
 
     if results:
         _print_apply_results(results)
@@ -1795,6 +1901,7 @@ EXPORT_MODES = {
 CLEAN_UP_TOOLS = {
     "Normalize": _render_normalize_tool,
     "Duplicate Artist": _render_duplicate_artist_tool,
+    "Genre": _render_genre_tool,
     "DRM Files": _render_drm_tool,
     "Duplicate Files": _render_duplicate_files_tool,
     "Multi-Artist Credits": _render_multi_artist_tool,
@@ -1940,6 +2047,10 @@ with tab_review:
             (
                 "Multi-artist credits to review",
                 len(st.session_state.get("multi_artist_candidates", [])),
+            ),
+            (
+                "Duplicate genre spellings",
+                len(st.session_state.get("genre_recommendations", [])),
             ),
             (
                 "Duplicate song files",

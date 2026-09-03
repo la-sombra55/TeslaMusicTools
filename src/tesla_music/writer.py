@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from mutagen import File
-from mutagen.id3 import TALB, TIT2, TPE1, TPE2
+from mutagen.id3 import TALB, TCON, TIT2, TPE1, TPE2
 from mutagen.wave import WAVE
 
 
@@ -10,6 +10,7 @@ MP3_EASY_KEYS = {
     "title": "title",
     "album": "album",
     "album_artist": "albumartist",
+    "genre": "genre",
 }
 
 MP4_ATOMS = {
@@ -17,6 +18,7 @@ MP4_ATOMS = {
     "title": "\xa9nam",
     "album": "\xa9alb",
     "album_artist": "aART",
+    "genre": "\xa9gen",
 }
 
 # WAV stores tags as raw ID3 frames (same as MP3 under the hood), but
@@ -27,6 +29,7 @@ WAV_ID3_FRAMES = {
     "title": TIT2,
     "album": TALB,
     "album_artist": TPE2,
+    "genre": TCON,
 }
 
 

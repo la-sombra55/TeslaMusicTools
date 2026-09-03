@@ -1,6 +1,10 @@
 from collections import Counter
 
-from tesla_music.normalizer import find_album_duplicates_by_artist, find_similar_artists
+from tesla_music.normalizer import (
+    find_album_duplicates_by_artist,
+    find_similar_artists,
+    find_similar_genres,
+)
 
 
 def test_find_similar_artists_groups_case_variants():
@@ -67,6 +71,36 @@ def test_find_similar_artists_does_not_group_distinct_artists():
 
 def test_find_similar_artists_returns_empty_for_empty_input():
     assert find_similar_artists(Counter()) == []
+
+
+def test_find_similar_genres_groups_spacing_and_case_variants():
+    genres = Counter({"Hip-Hop": 120, "Hip Hop": 15, "hip hop": 8, "HIPHOP": 3})
+
+    groups = find_similar_genres(genres)
+
+    assert len(groups) == 1
+    group = groups[0]
+    assert {g["genre"] for g in group["genres"]} == {"Hip-Hop", "Hip Hop", "hip hop", "HIPHOP"}
+    assert group["score"] > 0
+
+
+def test_find_similar_genres_groups_ampersand_spacing_variants():
+    genres = Counter({"R&B": 40, "R & B": 6, "r&b": 2})
+
+    groups = find_similar_genres(genres)
+
+    assert len(groups) == 1
+    assert {g["genre"] for g in groups[0]["genres"]} == {"R&B", "R & B", "r&b"}
+
+
+def test_find_similar_genres_does_not_group_distinct_genres():
+    genres = Counter({"Pop": 30, "Rock": 25, "Jazz": 10})
+
+    assert find_similar_genres(genres) == []
+
+
+def test_find_similar_genres_returns_empty_for_empty_input():
+    assert find_similar_genres(Counter()) == []
 
 
 def test_find_album_duplicates_by_artist_groups_case_variants(make_song):

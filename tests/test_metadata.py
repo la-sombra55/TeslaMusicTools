@@ -27,6 +27,7 @@ def test_read_metadata_populates_song_from_tags(monkeypatch):
                 "albumartist": ["Chris Brown"],
                 "album": ["X"],
                 "title": ["Deuces"],
+                "genre": ["Hip-Hop"],
             }
         ),
     )
@@ -37,6 +38,7 @@ def test_read_metadata_populates_song_from_tags(monkeypatch):
     assert song.album_artist == "Chris Brown"
     assert song.album == "X"
     assert song.title == "Deuces"
+    assert song.genre == "Hip-Hop"
 
 
 def test_read_metadata_defaults_missing_tags_to_unknown(monkeypatch):
@@ -46,6 +48,7 @@ def test_read_metadata_defaults_missing_tags_to_unknown(monkeypatch):
 
     assert song.artist == "Unknown"
     assert song.album == "Unknown"
+    assert song.genre == "Unknown"
 
 
 def test_read_metadata_returns_song_with_defaults_when_audio_is_none(monkeypatch):
@@ -71,6 +74,7 @@ def test_read_metadata_falls_back_to_raw_id3_frames_for_wav_files(monkeypatch):
                 "TPE1": FakeID3Frame("Chris Brown"),
                 "TALB": FakeID3Frame("X"),
                 "TIT2": FakeID3Frame("Deuces"),
+                "TCON": FakeID3Frame("Hip-Hop"),
             }
         ),
     )
@@ -81,6 +85,7 @@ def test_read_metadata_falls_back_to_raw_id3_frames_for_wav_files(monkeypatch):
     assert song.album == "X"
     assert song.title == "Deuces"
     assert song.album_artist == "Unknown"
+    assert song.genre == "Hip-Hop"
 
 
 def test_read_metadata_prefers_easy_keys_over_raw_id3_frames(monkeypatch):

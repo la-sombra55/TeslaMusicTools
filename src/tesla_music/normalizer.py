@@ -108,6 +108,25 @@ def find_similar_artists(artists):
     ]
 
 
+def find_similar_genres(genres):
+    """
+    Finds different spellings of the same genre across the whole library
+    (e.g. "Hip-Hop", "Hip Hop", "hip hop") -- not scoped per artist or
+    album, since a genre label means the same thing regardless of who's
+    tagged with it.
+    """
+    groups = _find_similar_names(genres)
+
+    return [
+        {
+            "genres": [{"genre": item["name"], "count": item["count"]} for item in group["names"]],
+            "score": group["score"],
+            "reason": group["reason"],
+        }
+        for group in groups
+    ]
+
+
 def find_album_duplicates_by_artist(artist_songs):
     """
     Detects similar album-name spellings within each artist's own songs

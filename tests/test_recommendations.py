@@ -1,4 +1,8 @@
-from tesla_music.recommendations import build_album_recommendations, build_recommendations
+from tesla_music.recommendations import (
+    build_album_recommendations,
+    build_genre_recommendations,
+    build_recommendations,
+)
 
 
 def test_keeps_the_artist_with_the_highest_count(make_song):
@@ -27,6 +31,91 @@ def test_keeps_the_artist_with_the_highest_count(make_song):
     assert len(recommendation["change"]) == 1
     assert recommendation["change"][0]["artist"] == "chris brown"
     assert len(recommendation["change"][0]["songs"]) == 2
+
+
+def test_build_genre_recommendations_keeps_the_genre_with_the_highest_count(make_song):
+    genre_groups = [
+        {
+            "genres": [
+                {"genre": "Hip-Hop", "count": 120},
+                {"genre": "Hip Hop", "count": 15},
+            ],
+            "score": 85,
+            "reason": "Word order difference",
+        }
+    ]
+    artist_songs = {
+        "Lupe Fiasco": [
+            make_song("a.mp3", artist="Lupe Fiasco", genre="Hip Hop"),
+            make_song("b.mp3", artist="Lupe Fiasco", genre="Hip Hop"),
+        ],
+        "Chris Brown": [make_song("c.mp3", artist="Chris Brown", genre="Hip-Hop")],
+    }
+
+    recommendations = build_genre_recommendations(genre_groups, artist_songs)
+
+    assert len(recommendations) == 1
+    recommendation = recommendations[0]
+    assert recommendation["keep"] == "Hip-Hop"
+    assert recommendation["keep_count"] == 120
+    assert recommendation["confidence"] == 85
+    assert len(recommendation["change"]) == 1
+    assert recommendation["change"][0]["genre"] == "Hip Hop"
+    assert len(recommendation["change"][0]["songs"]) == 2
+
+
+def test_build_genre_recommendations_spans_songs_across_different_artists(make_song):
+    # Genre grouping isn't scoped per artist -- a genre variant used by
+    # different artists should all show up under one recommendation.
+    genre_groups = [
+        {
+            "genres": [
+                {"genre": "R&B", "count": 40},
+                {"genre": "R & B", "count": 6},
+            ],
+            "score": 85,
+            "reason": "Word order difference",
+        }
+    ]
+    artist_songs = {
+        "Beyoncé": [make_song("a.mp3", artist="Beyoncé", genre="R & B")],
+        "Usher": [make_song("b.mp3", artist="Usher", genre="R & B")],
+    }
+
+    recommendations = build_genre_recommendations(genre_groups, artist_songs)
+
+    assert len(recommendations[0]["change"][0]["songs"]) == 2
+
+
+def test_build_genre_recommendations_candidates_include_songs(make_song):
+    genre_groups = [
+        {
+            "genres": [
+                {"genre": "Hip-Hop", "count": 2},
+                {"genre": "Hip Hop", "count": 1},
+            ],
+            "score": 85,
+            "reason": "Word order difference",
+        }
+    ]
+    artist_songs = {
+        "Lupe Fiasco": [
+            make_song("a.mp3", artist="Lupe Fiasco", genre="Hip-Hop"),
+            make_song("b.mp3", artist="Lupe Fiasco", genre="Hip-Hop"),
+            make_song("c.mp3", artist="Lupe Fiasco", genre="Hip Hop"),
+        ],
+    }
+
+    recommendations = build_genre_recommendations(genre_groups, artist_songs)
+
+    candidates = recommendations[0]["candidates"]
+    assert [c["genre"] for c in candidates] == ["Hip-Hop", "Hip Hop"]
+    assert len(candidates[0]["songs"]) == 2
+    assert len(candidates[1]["songs"]) == 1
+
+
+def test_build_genre_recommendations_returns_empty_for_no_groups():
+    assert build_genre_recommendations([], {}) == []
 
 
 def test_handles_missing_artist_songs_gracefully():
