@@ -365,6 +365,7 @@ STALE_WIDGET_KEY_PREFIXES = (
     "genre_keep_",
     "genre_include_",
     "genre_custom_",
+    "genre_manual_",
     "title_feat_group_include_",
     "title_feat_preferred_",
     "playlist_export_plan_",
@@ -447,6 +448,7 @@ def _run_import(library_path):
         "multi_artist_apply_results",
         "title_feat_apply_results",
         "genre_apply_results",
+        "genre_manual_groups",
         "artwork_plan",
         "flatten_plan",
         "restore_plan",
@@ -659,26 +661,41 @@ def _render_duplicate_artist_tool():
 
 
 GENRE_CUSTOM_OPTION = "✎ Type your own..."
+GENRE_PLAYLIST_TARGET = 20
 
 
 def _render_genre_tool():
     st.subheader("Genre")
     st.write(
-        "Finds different spellings of the same genre. For each group, pick "
-        "the genre you want those songs to fall under — any genre already "
-        "in your library, or a brand-new one you type — so you can combine "
-        "similar genres into fewer, bigger buckets."
+        "Cleans up genre spellings and lets you combine similar genres "
+        "into fewer, bigger buckets — handy since the Tesla music player "
+        "lets you browse by genre, so a small set of genres can double as "
+        "playlists."
     )
 
     recommendations = st.session_state.get("genre_recommendations", [])
     genre_counts = st.session_state.get("genre_counts", {})
 
-    if not recommendations:
-        st.success("✅ No duplicate genre spellings found.")
+    if not genre_counts:
+        st.success("✅ No genres found.")
         return
+
+    songs_by_genre = {}
+    for songs in st.session_state["report"]["artist_songs"].values():
+        for song in songs:
+            songs_by_genre.setdefault(song.genre, []).append(song)
 
     all_genre_names = sorted(genre_counts.keys(), key=str.casefold)
     genre_options = all_genre_names + [GENRE_CUSTOM_OPTION]
+
+    if len(all_genre_names) <= GENRE_PLAYLIST_TARGET:
+        st.info(f"You currently have {len(all_genre_names)} distinct genre(s).")
+    else:
+        st.warning(
+            f"You currently have {len(all_genre_names)} distinct genres — "
+            f"combine some below to get closer to {GENRE_PLAYLIST_TARGET} or "
+            "fewer if you want genres to double as playlists in the car."
+        )
 
     def _format_genre_option(name):
         if name == GENRE_CUSTOM_OPTION:
@@ -687,65 +704,171 @@ def _render_genre_tool():
         count = genre_counts.get(name, 0)
         return f'{name} ({count} song{"s" if count != 1 else ""})'
 
+    if "genre_manual_groups" not in st.session_state:
+        st.session_state["genre_manual_groups"] = []
+
+    manual_groups = st.session_state["genre_manual_groups"]
+    manually_grouped_genres = {genre for group in manual_groups for genre in group["sources"]}
+
     selected_recommendations = []
 
-    for i, rec in enumerate(recommendations):
-        needs_review = rec["confidence"] < DEDUP_REVIEW_THRESHOLD
-        candidates = rec["candidates"]
-        candidate_names = [c["genre"] for c in candidates]
-        variants_preview = " / ".join(candidate_names)
-        label = f'{variants_preview} — {rec["confidence"]}% confidence ({rec["reason"]})'
+    if recommendations:
+        st.write("**Suggested merges**")
+        st.caption("Different spellings of what's probably the same genre.")
 
-        with st.expander(label, expanded=needs_review):
-            if needs_review:
-                st.caption(
-                    "⚠️ Lower-confidence match — double-check these are really "
-                    "the same genre before including it."
+        for i, rec in enumerate(recommendations):
+            needs_review = rec["confidence"] < DEDUP_REVIEW_THRESHOLD
+            candidates = rec["candidates"]
+            candidate_names = [c["genre"] for c in candidates]
+            variants_preview = " / ".join(candidate_names)
+            label = f'{variants_preview} — {rec["confidence"]}% confidence ({rec["reason"]})'
+
+            with st.expander(label, expanded=needs_review):
+                if needs_review:
+                    st.caption(
+                        "⚠️ Lower-confidence match — double-check these are really "
+                        "the same genre before including it."
+                    )
+
+                default_genre = rec["keep"]
+                default_index = (
+                    genre_options.index(default_genre) if default_genre in genre_options else 0
                 )
 
-            default_genre = rec["keep"]
-            default_index = (
-                genre_options.index(default_genre) if default_genre in genre_options else 0
-            )
+                selection = st.selectbox(
+                    "Standardize to",
+                    genre_options,
+                    index=default_index,
+                    format_func=_format_genre_option,
+                    key=f"genre_keep_{i}",
+                )
 
-            selection = st.selectbox(
-                "Standardize to",
-                genre_options,
-                index=default_index,
-                format_func=_format_genre_option,
-                key=f"genre_keep_{i}",
-            )
+                if selection == GENRE_CUSTOM_OPTION:
+                    keep_name = st.text_input("New genre name", key=f"genre_custom_{i}").strip()
+                else:
+                    keep_name = selection
 
-            if selection == GENRE_CUSTOM_OPTION:
-                keep_name = st.text_input("New genre name", key=f"genre_custom_{i}").strip()
-            else:
-                keep_name = selection
+                for candidate in candidates:
+                    if candidate["genre"] == keep_name:
+                        continue
 
-            for candidate in candidates:
-                if candidate["genre"] == keep_name:
-                    continue
+                    display_name = keep_name or "?"
+                    st.write(
+                        f'"{candidate["genre"]}" → "{display_name}" ({candidate["count"]} songs)'
+                    )
+                    for song in candidate["songs"]:
+                        st.caption(song.path.name)
 
-                display_name = keep_name or "?"
-                st.write(f'"{candidate["genre"]}" → "{display_name}" ({candidate["count"]} songs)')
-                for song in candidate["songs"]:
-                    st.caption(song.path.name)
+                include = st.checkbox(
+                    "Include this merge",
+                    value=not needs_review,
+                    key=f"genre_include_{i}",
+                    disabled=not keep_name,
+                )
 
-            include = st.checkbox(
-                "Include this merge",
-                value=not needs_review,
-                key=f"genre_include_{i}",
-                disabled=not keep_name,
-            )
+            if include and keep_name:
+                change_candidates = [
+                    c
+                    for c in candidates
+                    if c["genre"] != keep_name and c["genre"] not in manually_grouped_genres
+                ]
 
-        if include and keep_name:
-            selected_recommendations.append(
+                if change_candidates:
+                    selected_recommendations.append(
+                        {
+                            "keep": keep_name,
+                            "change": change_candidates,
+                            "confidence": rec["confidence"],
+                            "reason": rec["reason"],
+                        }
+                    )
+
+    st.divider()
+    st.write("**Combine genres manually**")
+    st.caption(
+        "Pick any set of genres that should really be one genre — useful "
+        "when they're not just spelling differences, like \"Trap\", "
+        "\"Gangsta Rap\", and \"Hip Hop\" all becoming \"Hip-Hop\"."
+    )
+
+    selection_options = [name for name in all_genre_names if name not in manually_grouped_genres]
+
+    selected_genres = st.multiselect(
+        "Genres to combine",
+        selection_options,
+        format_func=_format_genre_option,
+        key="genre_manual_selection",
+    )
+
+    manual_target_index = 0
+    if selected_genres:
+        default_target = max(selected_genres, key=lambda name: genre_counts.get(name, 0))
+        if default_target in genre_options:
+            manual_target_index = genre_options.index(default_target)
+
+    manual_selection = st.selectbox(
+        "Combine into",
+        genre_options,
+        index=manual_target_index,
+        format_func=_format_genre_option,
+        key="genre_manual_target",
+    )
+
+    if manual_selection == GENRE_CUSTOM_OPTION:
+        manual_target = st.text_input("New genre name", key="genre_manual_target_custom").strip()
+    else:
+        manual_target = manual_selection
+
+    if st.button(
+        "Add Group",
+        key="genre_manual_add",
+        disabled=len(selected_genres) < 2 or not manual_target,
+    ):
+        st.session_state["genre_manual_groups"].append(
+            {"target": manual_target, "sources": selected_genres}
+        )
+        st.session_state.pop("genre_manual_selection", None)
+        st.session_state.pop("genre_manual_target_custom", None)
+        st.rerun()
+
+    if manual_groups:
+        st.write("Staged groups:")
+
+        for i, group in enumerate(manual_groups):
+            total_songs = sum(genre_counts.get(name, 0) for name in group["sources"])
+            group_col, remove_col = st.columns([5, 1])
+
+            with group_col:
+                sources_preview = " / ".join(group["sources"])
+                st.caption(f'{sources_preview} → "{group["target"]}" ({total_songs} songs)')
+
+            with remove_col:
+                if st.button("Remove", key=f"genre_manual_remove_{i}"):
+                    st.session_state["genre_manual_groups"].pop(i)
+                    st.rerun()
+
+        for group in manual_groups:
+            change_candidates = [
                 {
-                    "keep": keep_name,
-                    "change": [c for c in candidates if c["genre"] != keep_name],
-                    "confidence": rec["confidence"],
-                    "reason": rec["reason"],
+                    "genre": name,
+                    "count": genre_counts.get(name, 0),
+                    "songs": songs_by_genre.get(name, []),
                 }
-            )
+                for name in group["sources"]
+                if name != group["target"]
+            ]
+
+            if change_candidates:
+                selected_recommendations.append(
+                    {
+                        "keep": group["target"],
+                        "change": change_candidates,
+                        "confidence": 100,
+                        "reason": "Manually combined",
+                    }
+                )
+
+    st.divider()
 
     plan = build_genre_change_plan(selected_recommendations)
 
@@ -762,9 +885,18 @@ def _render_genre_tool():
         disabled=not confirm or plan["total_changes"] == 0,
         key="apply_genre",
     ):
+        genre_progress_bar = st.progress(0, text="Starting genre merge...")
+
         st.session_state["genre_apply_results"] = apply_changes(
-            plan, dry_run=False, library_path=st.session_state["library_path"]
+            plan,
+            dry_run=False,
+            library_path=st.session_state["library_path"],
+            on_progress=_make_progress_callback(
+                genre_progress_bar, "Applying genre changes", "files", time.time()
+            ),
         )
+
+        genre_progress_bar.empty()
         st.rerun()
 
     results = st.session_state.get("genre_apply_results")

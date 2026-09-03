@@ -144,6 +144,28 @@ def test_failed_update_is_recorded_but_does_not_raise(monkeypatch):
     assert "Unsupported file type" in results[0]["error"]
 
 
+def test_apply_changes_reports_progress(monkeypatch):
+    monkeypatch.setattr(
+        apply, "create_backup", lambda file_path, backup_root: Path("data/backups/x/a.mp3")
+    )
+    monkeypatch.setattr(apply, "update_tags", lambda file_path, tags: True)
+
+    calls = []
+
+    plan = _plan(
+        [
+            {"file": "a.mp3", "current_artist": "chris brown", "new_artist": "Chris Brown"},
+            {"file": "b.mp3", "current_artist": "chris brown", "new_artist": "Chris Brown"},
+        ]
+    )
+
+    apply.apply_changes(
+        plan, dry_run=False, on_progress=lambda completed, total: calls.append((completed, total))
+    )
+
+    assert calls == [(1, 2), (2, 2)]
+
+
 def test_print_apply_report_summarizes_status_counts(capsys):
     results = [
         {"file": "a.mp3", "current_artist": "x", "new_artist": "y", "status": "updated"},

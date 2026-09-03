@@ -22,14 +22,16 @@ def _tag_updates(change):
     return tags
 
 
-def apply_changes(plan, dry_run=True, library_path=None):
+def apply_changes(plan, dry_run=True, library_path=None, on_progress=None):
     results = []
     backup_root = None if dry_run else new_backup_root()
 
     if backup_root is not None and library_path is not None:
         record_backup_library_path(backup_root, library_path)
 
-    for change in plan["changes"]:
+    total = len(plan["changes"])
+
+    for index, change in enumerate(plan["changes"]):
         file_path = change["file"]
 
         result = {
@@ -65,6 +67,9 @@ def apply_changes(plan, dry_run=True, library_path=None):
                 result["error"] = str(error)
 
         results.append(result)
+
+        if on_progress is not None:
+            on_progress(index + 1, total)
 
     return results
 
