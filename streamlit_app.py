@@ -887,7 +887,7 @@ def _render_genre_tool():
     ):
         genre_progress_bar = st.progress(0, text="Starting genre merge...")
 
-        st.session_state["genre_apply_results"] = apply_changes(
+        genre_results = apply_changes(
             plan,
             dry_run=False,
             library_path=st.session_state["library_path"],
@@ -897,6 +897,11 @@ def _render_genre_tool():
         )
 
         genre_progress_bar.empty()
+
+        with st.spinner("Refreshing library data..."):
+            _refresh_library_state()
+
+        st.session_state["genre_apply_results"] = genre_results
         st.rerun()
 
     results = st.session_state.get("genre_apply_results")
@@ -2200,6 +2205,8 @@ with tab_review:
                     st.caption(f"{song.artist} — {song.title} ({song.bitrate} kbps)")
 
         st.subheader("What the tool found")
+
+        st.caption(f"{len(st.session_state.get('genre_counts', {}))} distinct genre(s) found.")
 
         overview_rows = [
             ("Duplicate artist spellings", len(st.session_state.get("recommendations", []))),
